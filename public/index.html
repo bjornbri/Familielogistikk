@@ -298,6 +298,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
 .place-list li[aria-selected="true"],.place-list li:hover{background:var(--soft)}
 .place-list .attrib{cursor:default;font-size:.7rem;color:var(--muted);text-align:right;padding:4px 8px}
 .place-list .attrib:hover{background:none}
+.place-err{font-size:.82rem;font-weight:400;color:var(--danger);margin:0}
 .place-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.85rem;font-weight:400;color:var(--muted)}
 .maplink{color:var(--ink);font-weight:700;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface);font-size:.82rem;white-space:nowrap}
 .maplink:hover{border-color:var(--muted)}
@@ -376,6 +377,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
         <label for="ev-place">Sted</label>
         <input id="ev-place" placeholder="Søk etter sted, f.eks. holmen svømme" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="place-list">
         <ul class="place-list" id="place-list" role="listbox" hidden></ul>
+        <p class="place-err" id="place-err" role="status" hidden></p>
         <div class="place-meta" id="place-meta" hidden></div>
       </div>
       <div class="row2">
@@ -801,7 +803,7 @@ function openEvent(e, fromSms){
   const x=S.editing;
   $("#ev-h").textContent = S.events.some(z=>z.id===x.id) ? "Endre avtale" : (fromSms?"Avtale fra SMS":"Ny avtale");
   $("#ev-title").value=x.title||""; $("#ev-date").value=x.date||""; $("#ev-start").value=x.start||""; $("#ev-end").value=x.end||"";
-  $("#ev-place").value=x.place||""; closePlaces(); placeSession=""; drawPlaceMeta(); $("#ev-note").value=x.note||""; $("#ev-remind").value=x.remind||""; $("#ev-repeat").value=x.repeat||"";
+  $("#ev-place").value=x.place||""; closePlaces(); placeErr(""); placeSession=""; drawPlaceMeta(); $("#ev-note").value=x.note||""; $("#ev-remind").value=x.remind||""; $("#ev-repeat").value=x.repeat||"";
   drawWho();
   const smsEl=$("#ev-sms"); if(x.sms){smsEl.hidden=false;smsEl.innerHTML=`<div class="f" style="font-size:.8rem;font-weight:700;color:var(--muted)">Original melding</div><div class="origsms">${esc(x.sms)}</div>`} else smsEl.hidden=true;
   const del=$("#ev-del"); del.hidden=!S.events.some(z=>z.id===x.id) || S.readOnly; del.textContent="Slett"; del.dataset.armed="";
@@ -819,6 +821,7 @@ function drawPlaceMeta(){
   el.innerHTML=(x.address?`<span>${esc(x.address)}</span>`:"")+(u?`<a class="maplink" href="${esc(u)}" target="_blank" rel="noopener">Åpne i Google Maps ↗</a>`:"");
   el.hidden=!el.innerHTML;
 }
+function placeErr(t){ const el=$("#place-err"); el.textContent=t||""; el.hidden=!t; }
 function closePlaces(){ const l=$("#place-list"); l.hidden=true; l.innerHTML=""; placeItems=[]; placeIdx=-1; $("#ev-place").setAttribute("aria-expanded","false"); }
 function drawPlaces(){
   const l=$("#place-list");
@@ -837,15 +840,15 @@ async function pickPlace(i){
 }
 $("#ev-place").addEventListener("input",()=>{
   const x=S.editing; if(x){ x.address=""; x.mapsUrl=""; x.placeId=""; } drawPlaceMeta();
-  if(!placesEnabled) return;
   clearTimeout(placeT); const q=$("#ev-place").value.trim();
-  if(q.length<3){ closePlaces(); return; }
+  if(q.length<3){ closePlaces(); placeErr(""); return; }
+  if(!placesEnabled){ placeErr("Forslag fra Google Maps er ikke slått på ennå. Legg inn GOOGLE_MAPS_API_KEY i Render."); return; }
   placeT=setTimeout(async()=>{
     if(!placeSession) placeSession=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));
     const seq=++placeSeq;
     try{ const j=await api("/api/places/autocomplete?q="+encodeURIComponent(q)+"&session="+encodeURIComponent(placeSession));
-      if(seq!==placeSeq) return; placeItems=j.suggestions||[]; placeIdx=-1; drawPlaces(); }
-    catch{ if(seq===placeSeq) closePlaces(); }
+      if(seq!==placeSeq) return; placeItems=j.suggestions||[]; placeIdx=-1; drawPlaces(); placeErr(placeItems.length?"":"Fant ingen steder. Prøv et annet ord."); }
+    catch(e){ if(seq===placeSeq){ closePlaces(); if(e.status!==401) placeErr(e.error); } }
   },250);
 });
 $("#ev-place").addEventListener("keydown",e=>{

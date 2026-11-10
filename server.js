@@ -370,18 +370,34 @@ Bruk "" eller [] for det du ikke finner. Mangler årstall, velg første mulige d
   catch { res.status(422).json({ error: "Fant ingen tydelig avtale i bildet. Prøv igjen, eller skriv den inn selv." }); }
 }));
 
+function googleHint(status, reason) {
+  const t = (reason || "").toLowerCase();
+  if (t.includes("referer") || t.includes("referrer")) return "Google-nøkkelen er låst til nettsider. Endre «Application restrictions» til «None» (eller IP) i Google Cloud.";
+  if (t.includes("has not been used") || t.includes("disabled") || t.includes("service_disabled")) return "Places API (New) er ikke slått på i Google Cloud-prosjektet.";
+  if (t.includes("billing")) return "Google Cloud-prosjektet mangler betalingskonto.";
+  if (t.includes("api key not valid") || t.includes("api_key_invalid")) return "Google-nøkkelen er ugyldig. Sjekk at hele nøkkelen er limt inn i Render.";
+  if (t.includes("blocked") || status === 403) return "Google-nøkkelen har ikke tilgang til Places API (New). Sjekk «API restrictions».";
+  return "Stedssøket svarer ikke akkurat nå.";
+}
+
 // Place search through Google Places API (New). Session tokens group typing + selection into one billed session.
 const NORWAY_BIAS = { rectangle: { low: { latitude: 57.9, longitude: 4.5 }, high: { latitude: 71.2, longitude: 31.2 } } };
 app.get("/api/places/autocomplete", throttle(400, 60 * 60e3), wrap(auth), wrap(async (req, res) => {
-  if (!GOOGLE_MAPS_API_KEY) return res.status(503).json({ error: "Stedssøk er ikke slått på." });
+  if (!GOOGLE_MAPS_API_KEY) return res.status(503).json({ error: "Forslag fra Google Maps er ikke slått på: GOOGLE_MAPS_API_KEY mangler i Render." });
   const q = clean(req.query.q, 120);
   if (q.length < 2) return res.json({ suggestions: [] });
-  const r = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+  let r;
+  try { r = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY },
     body: JSON.stringify({ input: q, languageCode: "no", regionCode: "no", locationBias: NORWAY_BIAS, sessionToken: clean(req.query.session, 64) || undefined }),
-  });
-  if (!r.ok) { console.error("Places autocomplete", r.status, (await r.text()).slice(0, 300)); return res.status(502).json({ error: "Stedssøket svarer ikke akkurat nå." }); }
+  }); } catch (e) { console.error("Places autocomplete network", e.message); return res.status(502).json({ error: "Får ikke kontakt med Google Maps akkurat nå." }); }
+  if (!r.ok) {
+    const body = await r.text();
+    console.error("Places autocomplete", r.status, body.slice(0, 500));
+    let reason = ""; try { const g = JSON.parse(body).error || {}; reason = [g.status, g.message].filter(Boolean).join(": "); } catch {}
+    return res.status(502).json({ error: googleHint(r.status, reason), reason: reason.slice(0, 300) });
+  }
   const j = await r.json();
   const suggestions = (j.suggestions || []).filter((s) => s.placePrediction).slice(0, 6).map((s) => {
     const p = s.placePrediction;
