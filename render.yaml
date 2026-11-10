@@ -18,6 +18,8 @@ services:
           property: connectionString
       - key: ANTHROPIC_API_KEY
         sync: false   # valgfri: slår på lesing av avtaler fra bilder
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false   # valgfri: slår på stedssøk med Google Maps
 
 databases:
   - name: familielogistikk-db

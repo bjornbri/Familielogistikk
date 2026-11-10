@@ -13,6 +13,7 @@ const PROD = process.env.NODE_ENV === "production";
 const DATABASE_URL = process.env.DATABASE_URL;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "";
 const SESSION_DAYS = 60;
 const INVITE_DAYS = 7;
 
@@ -162,6 +163,7 @@ async function familyPayload(user) {
     user: { name: user.name, email: user.email, role: user.role },
     family: { name: f.rows[0].name, members: f.rows[0].members, accounts: people.rows },
     imageReading: !!ANTHROPIC_API_KEY,
+    placesSearch: !!GOOGLE_MAPS_API_KEY,
   };
 }
 
@@ -279,7 +281,7 @@ app.get("/api/invites/:token", wrap(async (req, res) => {
 }));
 
 // Events
-const EVENT_FIELDS = ["title", "date", "start", "end", "who", "place", "note", "remind", "repeat", "sms", "example", "created"];
+const EVENT_FIELDS = ["title", "date", "start", "end", "who", "place", "address", "mapsUrl", "placeId", "note", "remind", "repeat", "sms", "example", "created"];
 function cleanEvent(b) {
   const o = {};
   for (const k of EVENT_FIELDS) if (b[k] !== undefined) o[k] = b[k];
@@ -289,6 +291,9 @@ function cleanEvent(b) {
   o.end = /^\d{2}:\d{2}$/.test(o.end) ? o.end : "";
   o.who = Array.isArray(o.who) ? o.who.map((x) => clean(String(x), 40)).slice(0, 20) : [];
   o.place = clean(o.place, 200);
+  o.address = clean(o.address, 300);
+  o.mapsUrl = /^https:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl)\//.test(o.mapsUrl || "") ? clean(o.mapsUrl, 500) : "";
+  o.placeId = clean(o.placeId, 300);
   o.note = clean(o.note, 600);
   o.remind = clean(o.remind, 20);
   o.repeat = ["", "weekly", "biweekly"].includes(o.repeat) ? o.repeat : "";
@@ -363,6 +368,39 @@ Bruk "" eller [] for det du ikke finner. Mangler årstall, velg første mulige d
   const m = text.match(/\{[\s\S]*\}/);
   try { res.json(JSON.parse(m ? m[0] : text)); }
   catch { res.status(422).json({ error: "Fant ingen tydelig avtale i bildet. Prøv igjen, eller skriv den inn selv." }); }
+}));
+
+// Place search through Google Places API (New). Session tokens group typing + selection into one billed session.
+const NORWAY_BIAS = { rectangle: { low: { latitude: 57.9, longitude: 4.5 }, high: { latitude: 71.2, longitude: 31.2 } } };
+app.get("/api/places/autocomplete", throttle(400, 60 * 60e3), wrap(auth), wrap(async (req, res) => {
+  if (!GOOGLE_MAPS_API_KEY) return res.status(503).json({ error: "Stedssøk er ikke slått på." });
+  const q = clean(req.query.q, 120);
+  if (q.length < 2) return res.json({ suggestions: [] });
+  const r = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY },
+    body: JSON.stringify({ input: q, languageCode: "no", regionCode: "no", locationBias: NORWAY_BIAS, sessionToken: clean(req.query.session, 64) || undefined }),
+  });
+  if (!r.ok) { console.error("Places autocomplete", r.status, (await r.text()).slice(0, 300)); return res.status(502).json({ error: "Stedssøket svarer ikke akkurat nå." }); }
+  const j = await r.json();
+  const suggestions = (j.suggestions || []).filter((s) => s.placePrediction).slice(0, 6).map((s) => {
+    const p = s.placePrediction;
+    return { placeId: p.placeId, name: p.structuredFormat?.mainText?.text || p.text?.text || "", detail: p.structuredFormat?.secondaryText?.text || "" };
+  });
+  res.json({ suggestions });
+}));
+
+app.get("/api/places/:id", throttle(200, 60 * 60e3), wrap(auth), wrap(async (req, res) => {
+  if (!GOOGLE_MAPS_API_KEY) return res.status(503).json({ error: "Stedssøk er ikke slått på." });
+  const id = clean(req.params.id, 300);
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return res.status(400).json({ error: "Ugyldig sted." });
+  const session = clean(req.query.session, 64);
+  const r = await fetch(`https://places.googleapis.com/v1/places/${id}?languageCode=no${session ? "&sessionToken=" + encodeURIComponent(session) : ""}`, {
+    headers: { "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY, "X-Goog-FieldMask": "id,displayName,formattedAddress,shortFormattedAddress,googleMapsUri" },
+  });
+  if (!r.ok) { console.error("Places details", r.status, (await r.text()).slice(0, 300)); return res.status(502).json({ error: "Fant ikke stedet." }); }
+  const p = await r.json();
+  res.json({ placeId: p.id, name: p.displayName?.text || "", address: p.shortFormattedAddress || p.formattedAddress || "", mapsUrl: p.googleMapsUri || "" });
 }));
 
 app.get("/healthz", (req, res) => res.send("ok"));

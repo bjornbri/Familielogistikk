@@ -290,6 +290,21 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
 .acct ul{margin:0;padding-left:18px;color:var(--muted);font-size:.9rem}
 .linkbox{display:flex;gap:8px}
 .linkbox input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px;font-size:.85rem}
+/* Stedssøk */
+.placewrap{position:relative;display:flex;flex-direction:column;gap:6px}
+.place-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);margin:0;padding:4px;list-style:none;max-height:260px;overflow:auto}
+.place-list li{padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;gap:1px;font-size:.92rem;font-weight:400;color:var(--ink)}
+.place-list li small{color:var(--muted);font-size:.8rem}
+.place-list li[aria-selected="true"],.place-list li:hover{background:var(--soft)}
+.place-list .attrib{cursor:default;font-size:.7rem;color:var(--muted);text-align:right;padding:4px 8px}
+.place-list .attrib:hover{background:none}
+.place-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.85rem;font-weight:400;color:var(--muted)}
+.maplink{color:var(--ink);font-weight:700;text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface);font-size:.82rem;white-space:nowrap}
+.maplink:hover{border-color:var(--muted)}
+.cardw{position:relative}
+.cardw > button{padding-right:84px}
+.cardw .maplink{position:absolute;top:10px;right:12px}
+.td-now + .maplink{background:var(--accent-ink);color:var(--accent);border-color:transparent}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:10px;font-weight:700;z-index:50;max-width:calc(100vw - 32px)}
 @media (prefers-reduced-motion:no-preference){.ev,.wev{transition:border-color .15s}}
 </style>
@@ -357,7 +372,12 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
         <label class="f">Til<input id="ev-end" type="time"></label>
       </div>
       <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--muted)">Hvem<div class="pick" id="ev-who"></div></div>
-      <label class="f">Sted<input id="ev-place" placeholder="Valgfritt"></label>
+      <div class="f placewrap">
+        <label for="ev-place">Sted</label>
+        <input id="ev-place" placeholder="Søk etter sted, f.eks. holmen svømme" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="place-list">
+        <ul class="place-list" id="place-list" role="listbox" hidden></ul>
+        <div class="place-meta" id="place-meta" hidden></div>
+      </div>
       <div class="row2">
         <label class="f">Varsel<select id="ev-remind">
           <option value="">Ingen</option><option value="15">15 min før</option><option value="60">1 time før</option>
@@ -491,7 +511,7 @@ function member(id){return S.members.find(m=>m.id===id)}
 function colorOf(e){const m=member((e.who||[])[0]);return m?`var(--m${m.c})`:"var(--muted)"}
 
 // ---------- API ----------
-let imgEnabled=false, imgCtl=null, pollT=null;
+let imgEnabled=false, placesEnabled=false, imgCtl=null, pollT=null;
 async function api(path,opts={}){
   const o={method:opts.method||"GET",headers:{"X-FL":"1"},credentials:"same-origin"};
   if(opts.body!==undefined){o.headers["Content-Type"]="application/json";o.body=JSON.stringify(opts.body);}
@@ -502,7 +522,7 @@ async function api(path,opts={}){
   return j;
 }
 function applyMe(me){
-  S.me=me; imgEnabled=!!me.imageReading;
+  S.me=me; imgEnabled=!!me.imageReading; placesEnabled=!!me.placesSearch;
   if(Array.isArray(me.family.members)&&me.family.members.length) S.members=me.family.members;
   $("#img-zone").hidden=!imgEnabled; $("#img-or").hidden=!imgEnabled;
 }
@@ -726,6 +746,8 @@ function evRow(e,cls){
     <span class="rb"><b>${esc(e.title)}</b><span>${esc(sub)}</span></span>
     <span class="rw">${who.slice(0,3).map(m=>`<i style="--pc:var(--m${m.c})" title="${esc(m.name)}">${esc(initials(m.name))}</i>`).join("")}${who.length>3?`<i style="--pc:var(--muted)">+${who.length-3}</i>`:""}</span></button>`;
 }
+function mapsLink(e){ if(e.mapsUrl) return e.mapsUrl; const q=[e.place,e.address].filter(Boolean).join(", "); return q?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(q):""; }
+function mapA(e){ const u=mapsLink(e); return u?`<a class="maplink" href="${esc(u)}" target="_blank" rel="noopener">Kart ↗</a>`:""; }
 function renderDay(){
   const d=S.anchor, list=eventsOn(d), isToday=iso(d)===iso(today());
   const now=new Date(), nm=now.getHours()*60+now.getMinutes();
@@ -736,8 +758,8 @@ function renderDay(){
   const rest=list.filter(e=>!past.includes(e));
   let h=`<div class="td">`;
   if(!isToday) h+=`<button class="back" data-act="today">← Tilbake til i dag</button>`;
-  for(const e of cur) h+=`<button class="td-now" data-ev="${esc(e.id)}"><span class="k">Nå${e.end?" · til "+esc(e.end):""}</span><span class="v">${esc(e.title)}</span><span class="s">${esc(whoNames(e)||"Hele familien")}${e.place?" · "+esc(e.place):""}</span></button>`;
-  if(nxt) h+=`<button class="td-next" data-ev="${esc(nxt.id)}"><span class="k">Neste · ${until(toMin(nxt.start)-nm)}</span><span class="v">${esc(nxt.start)} ${esc(nxt.title)}</span><span class="s">${esc(whoNames(nxt)||"Hele familien")}${nxt.place?" · "+esc(nxt.place):""}</span></button>`;
+  for(const e of cur) h+=`<div class="cardw"><button class="td-now" data-ev="${esc(e.id)}"><span class="k">Nå${e.end?" · til "+esc(e.end):""}</span><span class="v">${esc(e.title)}</span><span class="s">${esc(whoNames(e)||"Hele familien")}${e.place?" · "+esc(e.place):""}</span></button>${mapA(e)}</div>`;
+  if(nxt) h+=`<div class="cardw"><button class="td-next" data-ev="${esc(nxt.id)}"><span class="k">Neste · ${until(toMin(nxt.start)-nm)}</span><span class="v">${esc(nxt.start)} ${esc(nxt.title)}</span><span class="s">${esc(whoNames(nxt)||"Hele familien")}${nxt.place?" · "+esc(nxt.place):""}</span></button>${mapA(nxt)}</div>`;
   const shown=S.showPast?list:rest;
   if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,nxt))).join("")}</div>`;
   else h+=`<div class="td-done">${list.length?"Ingen flere avtaler i dag.":(isToday?"Ingen avtaler i dag.":"Ingen avtaler denne dagen.")}</div>`;
@@ -779,7 +801,7 @@ function openEvent(e, fromSms){
   const x=S.editing;
   $("#ev-h").textContent = S.events.some(z=>z.id===x.id) ? "Endre avtale" : (fromSms?"Avtale fra SMS":"Ny avtale");
   $("#ev-title").value=x.title||""; $("#ev-date").value=x.date||""; $("#ev-start").value=x.start||""; $("#ev-end").value=x.end||"";
-  $("#ev-place").value=x.place||""; $("#ev-note").value=x.note||""; $("#ev-remind").value=x.remind||""; $("#ev-repeat").value=x.repeat||"";
+  $("#ev-place").value=x.place||""; closePlaces(); placeSession=""; drawPlaceMeta(); $("#ev-note").value=x.note||""; $("#ev-remind").value=x.remind||""; $("#ev-repeat").value=x.repeat||"";
   drawWho();
   const smsEl=$("#ev-sms"); if(x.sms){smsEl.hidden=false;smsEl.innerHTML=`<div class="f" style="font-size:.8rem;font-weight:700;color:var(--muted)">Original melding</div><div class="origsms">${esc(x.sms)}</div>`} else smsEl.hidden=true;
   const del=$("#ev-del"); del.hidden=!S.events.some(z=>z.id===x.id) || S.readOnly; del.textContent="Slett"; del.dataset.armed="";
@@ -789,12 +811,60 @@ function openEvent(e, fromSms){
 function drawWho(){
   $("#ev-who").innerHTML=S.members.map(m=>`<button type="button" data-who="${esc(m.id)}" aria-pressed="${S.editing.who.includes(m.id)}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
 }
+// ---------- stedssøk ----------
+let placeSession="", placeT=null, placeSeq=0, placeItems=[], placeIdx=-1;
+function drawPlaceMeta(){
+  const x=S.editing, el=$("#place-meta"); if(!x) return;
+  const u=mapsLink({...x,place:$("#ev-place").value.trim()});
+  el.innerHTML=(x.address?`<span>${esc(x.address)}</span>`:"")+(u?`<a class="maplink" href="${esc(u)}" target="_blank" rel="noopener">Åpne i Google Maps ↗</a>`:"");
+  el.hidden=!el.innerHTML;
+}
+function closePlaces(){ const l=$("#place-list"); l.hidden=true; l.innerHTML=""; placeItems=[]; placeIdx=-1; $("#ev-place").setAttribute("aria-expanded","false"); }
+function drawPlaces(){
+  const l=$("#place-list");
+  if(!placeItems.length){ closePlaces(); return; }
+  l.innerHTML=placeItems.map((p,i)=>`<li role="option" id="pl-${i}" data-pi="${i}" aria-selected="${i===placeIdx}">${esc(p.name)}${p.detail?`<small>${esc(p.detail)}</small>`:""}</li>`).join("")+`<li class="attrib" aria-hidden="true">Google Maps</li>`;
+  l.hidden=false; $("#ev-place").setAttribute("aria-expanded","true");
+  if(placeIdx>=0) $("#ev-place").setAttribute("aria-activedescendant","pl-"+placeIdx); else $("#ev-place").removeAttribute("aria-activedescendant");
+}
+async function pickPlace(i){
+  const p=placeItems[i]; if(!p) return; closePlaces();
+  const x=S.editing; $("#ev-place").value=p.name; x.address=p.detail||""; x.placeId=p.placeId; x.mapsUrl="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(p.name+(p.detail?", "+p.detail:""))+"&query_place_id="+encodeURIComponent(p.placeId);
+  drawPlaceMeta();
+  try{ const d=await api("/api/places/"+encodeURIComponent(p.placeId)+"?session="+encodeURIComponent(placeSession)); if(S.editing!==x) return;
+    if(d.address) x.address=d.address; if(d.mapsUrl) x.mapsUrl=d.mapsUrl; drawPlaceMeta(); }catch{}
+  placeSession="";
+}
+$("#ev-place").addEventListener("input",()=>{
+  const x=S.editing; if(x){ x.address=""; x.mapsUrl=""; x.placeId=""; } drawPlaceMeta();
+  if(!placesEnabled) return;
+  clearTimeout(placeT); const q=$("#ev-place").value.trim();
+  if(q.length<3){ closePlaces(); return; }
+  placeT=setTimeout(async()=>{
+    if(!placeSession) placeSession=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2));
+    const seq=++placeSeq;
+    try{ const j=await api("/api/places/autocomplete?q="+encodeURIComponent(q)+"&session="+encodeURIComponent(placeSession));
+      if(seq!==placeSeq) return; placeItems=j.suggestions||[]; placeIdx=-1; drawPlaces(); }
+    catch{ if(seq===placeSeq) closePlaces(); }
+  },250);
+});
+$("#ev-place").addEventListener("keydown",e=>{
+  if($("#place-list").hidden) return;
+  if(e.key==="ArrowDown"){ e.preventDefault(); placeIdx=Math.min(placeIdx+1,placeItems.length-1); drawPlaces(); }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); placeIdx=Math.max(placeIdx-1,0); drawPlaces(); }
+  else if(e.key==="Enter"&&placeIdx>=0){ e.preventDefault(); pickPlace(placeIdx); }
+  else if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); closePlaces(); }
+});
+$("#place-list").addEventListener("mousedown",e=>e.preventDefault());
+$("#place-list").addEventListener("click",e=>{ const li=e.target.closest("[data-pi]"); if(li) pickPlace(+li.dataset.pi); });
+$("#ev-place").addEventListener("blur",()=>setTimeout(()=>{ if(document.activeElement!==$("#ev-place")) closePlaces(); },300));
+
 $("#ev-who").addEventListener("click",ev=>{const b=ev.target.closest("[data-who]"); if(!b) return; const id=b.dataset.who, w=S.editing.who; const i=w.indexOf(id); if(i>=0) w.splice(i,1); else w.push(id); drawWho();});
 $("#evform").addEventListener("submit",ev=>{
   ev.preventDefault(); if(S.readOnly) return;
   const x=S.editing; const title=$("#ev-title").value.trim(), date=$("#ev-date").value;
   if(!title||!date){toast("Fyll inn hva og dato");return}
-  Object.assign(x,{title,date,start:$("#ev-start").value,end:$("#ev-end").value,place:$("#ev-place").value.trim(),note:$("#ev-note").value.trim(),remind:$("#ev-remind").value,repeat:$("#ev-repeat").value});
+  Object.assign(x,{title,date,start:$("#ev-start").value,end:$("#ev-end").value,place:$("#ev-place").value.trim(),address:x.address||"",mapsUrl:x.mapsUrl||"",placeId:x.placeId||"",note:$("#ev-note").value.trim(),remind:$("#ev-remind").value,repeat:$("#ev-repeat").value});
   if(!x.created) x.created=Date.now();
   delete x.example;
   dEv.close(); saveEvent(x);

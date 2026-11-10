@@ -10,6 +10,7 @@ Har uke- og månedsvisning, en fullskjermtavle for nettbrett/vegg, og avtaler ka
 - **Inviter familiemedlemmer:** «Familie» → «Lag invitasjonslenke». Lenken virker én gang og gjelder i 7 dager.
 - Alle i familien ser og redigerer de samme avtalene. Endringer hentes hvert 30. sekund.
 - SMS-tolkning skjer i nettleseren. Lesing fra **bilder** krever `ANTHROPIC_API_KEY` på serveren (valgfritt).
+- **Stedssøk:** skriv «holmen svømme» i Sted-feltet og velg fra forslagene. Avtalen får adresse og lenke til Google Maps. Krever `GOOGLE_MAPS_API_KEY` (valgfritt). Uten nøkkel får alle steder likevel en «Åpne i Google Maps»-lenke basert på teksten.
 - Kan legges til på Hjem-skjermen på iPhone/Android og åpnes som en app (web-manifest).
 
 ## Kjør på Render
@@ -21,6 +22,16 @@ Har uke- og månedsvisning, en fullskjermtavle for nettbrett/vegg, og avtaler ka
 Merk om gratisplanene hos Render:
 - Webtjenesten sover etter en stund uten trafikk. Første besøk etter det kan ta opptil et minutt.
 - Gratis Postgres er tidsbegrenset. Bytt til en betalt databaseplan før dere legger inn data dere vil beholde.
+
+## Google Maps-nøkkel (stedssøk)
+
+1. Gå til console.cloud.google.com, lag et prosjekt og legg inn betalingskonto.
+2. Slå på **Places API (New)** under «APIs & Services → Library».
+3. Lag en nøkkel under «Credentials → Create credentials → API key».
+4. Begrens nøkkelen: «API restrictions» → bare *Places API (New)*. Sett gjerne en kvote eller et budsjettvarsel.
+5. Legg den inn i Render som `GOOGLE_MAPS_API_KEY` (Environment på webtjenesten).
+
+Nøkkelen brukes bare fra serveren og vises aldri i nettleseren.
 
 ## Kjør lokalt
 
