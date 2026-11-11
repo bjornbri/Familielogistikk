@@ -209,6 +209,27 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:7
 .td-done{font-size:1rem;color:var(--muted);padding:14px 2px}
 .back{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:.85rem;font-weight:700;align-self:flex-start}
 
+/* «I dag» som overskrift */
+.nav h1.is-today{display:flex;flex-direction:column-reverse;gap:2px}
+.nav h1.is-today #htext{font-size:clamp(2.4rem,9vw,3.4rem);line-height:1;letter-spacing:-.03em}
+.nav h1.is-today small{text-transform:none;letter-spacing:0;font-family:var(--f-body);font-size:1rem;font-weight:400;color:var(--muted)}
+.sec-h{font-family:var(--f-display);font-weight:700;font-size:1.25rem;margin:10px 0 0;letter-spacing:-.01em}
+/* Beskjeder */
+.msgs{display:flex;flex-direction:column;gap:6px}
+.msg{display:flex;gap:10px;align-items:flex-start;text-align:left;width:100%;border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));background:color-mix(in srgb,var(--accent) 12%,var(--surface));border-radius:12px;padding:10px 14px;font-size:1rem;line-height:1.35}
+.msg i{flex:none;width:10px;height:10px;border-radius:50%;background:var(--pc);margin-top:6px}
+.msg span{min-width:0;overflow-wrap:break-word}
+.addmsg{border:1px dashed var(--line);background:none;border-radius:12px;padding:8px 12px;text-align:left;color:var(--muted);font-weight:700;font-size:.9rem}
+.addmsg:hover{border-color:var(--muted);color:var(--ink)}
+/* I morgen som liste */
+.tmlist{display:flex;flex-direction:column;gap:2px}
+.tmrow{display:grid;grid-template-columns:3.4rem 10px minmax(0,1fr);gap:10px;align-items:center;border:0;background:none;text-align:left;padding:6px 2px;font-size:.98rem;width:100%}
+.tmrow .t{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:.9rem}
+.tmrow i{width:10px;height:10px;border-radius:50%;background:var(--pc)}
+.tmrow span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tmrow small{color:var(--muted)}
+.tmempty{color:var(--muted);padding:4px 2px}
+
 /* Bottom bar on phones: navigation and the two add buttons within thumb reach */
 .bottombar{display:none}
 @media (max-width:640px){
@@ -234,6 +255,22 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:7
 }
 body.v-day .members,body.v-day .note{display:none}
 
+/* Tavle: «I dag» stort øverst, beskjeder, kolonner per person, «I morgen» som egen seksjon */
+.bd-head{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.bd-title{margin-right:auto}
+.bd-title h1{margin:0;font-family:var(--f-display);font-weight:700;font-size:clamp(3.2rem,9vw,6.5rem);line-height:.9;letter-spacing:-.04em}
+.bd-title p{margin:8px 0 0;font-size:clamp(1.05rem,2vw,1.5rem);color:var(--muted)}
+.bd-right{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.bd-time{font-family:var(--f-mono);font-size:clamp(1.6rem,3.5vw,2.6rem);font-variant-numeric:tabular-nums;line-height:1}
+.bd-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.bd-msgs{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}
+.bd-msgs .msg{font-size:clamp(1.05rem,1.8vw,1.4rem);padding:12px 16px}
+.bd-msgs .msg i{width:14px;height:14px}
+.bd-tmsec{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px}
+.bd-tmsec h2{margin:0;font-family:var(--f-display);font-size:clamp(1.4rem,2.6vw,2rem)}
+.bd-tmsec .tmlist{display:flex;flex-direction:column;gap:2px;max-width:760px}
+.bd-tmsec .tmrow{grid-template-columns:4.6rem 12px minmax(0,1fr)}
+.bd-tmsec .tmrow{font-size:clamp(1rem,1.6vw,1.25rem)}
 /* Tavle: full-screen wall display. Clock + now/next band on top, one column per family member, tomorrow strip at the bottom */
 #board{min-height:100%;background:var(--bg);padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));padding-block:20px 24px;display:flex;flex-direction:column;gap:18px}
 body.board header,body.board > .wrap{display:none}
@@ -427,6 +464,22 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
   </div>
 </dialog>
 
+<dialog id="dlg-note">
+  <form class="dlg" id="noteform" method="dialog">
+    <header><h2 id="note-h">Ny beskjed</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body">
+      <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--muted)">Fra<div class="pick" id="note-who"></div></div>
+      <label class="f">Beskjed<textarea id="note-text" rows="3" maxlength="280" required placeholder="F.eks. Jeg blir med Johanne hjem etter skolen"></textarea></label>
+      <label class="f">Gjelder dag<input id="note-date" type="date" required></label>
+    </div>
+    <footer>
+      <button type="button" class="btn danger left" id="note-del" hidden>Slett</button>
+      <button type="button" class="btn" data-close>Avbryt</button>
+      <button type="submit" class="btn primary">Legg på tavla</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="dlg-family">
   <div class="dlg">
     <header><h2>Familie og konto</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
@@ -529,7 +582,8 @@ function applyMe(me){
   $("#img-zone").hidden=!imgEnabled; $("#img-or").hidden=!imgEnabled;
 }
 async function loadEvents(){
-  const j=await api("/api/events"); S.events=j.events||[]; S.loaded=true;
+  const [j,n]=await Promise.all([api("/api/events"),api("/api/notes").catch(()=>({notes:S.notes||[]}))]);
+  S.events=j.events||[]; S.notes=n.notes||[]; S.loaded=true;
   if(statusMsg) statusMsg=""; render();
 }
 async function refresh(){
@@ -721,6 +775,9 @@ function renderHeading(){
   if(S.view==="day"){ const diff=Math.round((a-today())/864e5); eye=diff===0?"I dag · uke "+isoWeek(a)+" · kl "+pad(new Date().getHours())+":"+pad(new Date().getMinutes()):diff===1?"I morgen · uke "+isoWeek(a):diff===-1?"I går · uke "+isoWeek(a):"Uke "+isoWeek(a); h=cap(fDayLong.format(a)); }
   else if(S.view==="week"){ const s=startOfWeek(a),e=addDays(s,6); eye="Uke "+isoWeek(s); h=`${s.getDate()}.${s.getMonth()!==e.getMonth()?" "+fmt({month:"short"}).format(s):""} – ${e.getDate()}. ${fmt({month:"long"}).format(e)}`; }
   else { eye=String(a.getFullYear()); h=cap(fmt({month:"long"}).format(a)); }
+  const isT=S.view==="day" && iso(a)===iso(today());
+  if(isT){ eye=cap(fDayLong.format(a))+" · uke "+isoWeek(a); h="I dag"; }
+  $("#heading").classList.toggle("is-today",isT);
   $("#eyebrow").textContent=eye; $("#htext").textContent=h;
 }
 function evCard(e,d,isToday){
@@ -750,24 +807,31 @@ function evRow(e,cls){
 }
 function mapsLink(e){ if(e.mapsUrl) return e.mapsUrl; const q=[e.place,e.address].filter(Boolean).join(", "); return q?"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(q):""; }
 function mapA(e){ const u=mapsLink(e); return u?`<a class="maplink" href="${esc(u)}" target="_blank" rel="noopener">Kart ↗</a>`:""; }
+function notesOn(d){ const ds=iso(d); return (S.notes||[]).filter(n=>n.date===ds).sort((a,b)=>(a.created||0)-(b.created||0)); }
+function noteHtml(n){ const m=member(n.who); return `<button class="msg" data-note="${esc(n.id)}" style="--pc:${m?`var(--m${m.c})`:"var(--muted)"}"><i></i><span><b>${esc(m?m.name:"Noen")}:</b> ${esc(n.text)}</span></button>`; }
+function msgsBlock(d){
+  const ns=notesOn(d);
+  return `<div class="msgs">${ns.map(noteHtml).join("")}${S.readOnly?"":`<button class="addmsg" data-act="note">+ Skriv en beskjed${ns.length?"":" til familien"}</button>`}</div>`;
+}
+function tomorrowList(d){
+  const tl=eventsOn(addDays(d,1));
+  if(!tl.length) return `<div class="tmempty">Ingenting planlagt</div>`;
+  return `<div class="tmlist">${tl.map(e=>`<button class="tmrow" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}"><span class="t">${esc(e.start||"Hele dagen")}</span><i></i><span>${esc(e.title)}${whoNames(e)?` <small>· ${esc(whoNames(e))}</small>`:""}</span></button>`).join("")}</div>`;
+}
 function renderDay(){
   const d=S.anchor, list=eventsOn(d), isToday=iso(d)===iso(today());
   const now=new Date(), nm=now.getHours()*60+now.getMinutes();
   if(!list.length && !S.events.length) return emptyBlock();
-  const nxt=isToday?list.find(e=>e.start&&toMin(e.start)>nm):null;
-  const cur=isToday?list.filter(e=>e.start&&toMin(e.start)<=nm&&nm<endMin(e)):[];
   const past=isToday?list.filter(e=>e.start&&endMin(e)<=nm):[];
   const rest=list.filter(e=>!past.includes(e));
   let h=`<div class="td">`;
   if(!isToday) h+=`<button class="back" data-act="today">← Tilbake til i dag</button>`;
-  for(const e of cur) h+=`<div class="cardw"><button class="td-now" data-ev="${esc(e.id)}"><span class="k">Nå${e.end?" · til "+esc(e.end):""}</span><span class="v">${esc(e.title)}</span><span class="s">${esc(whoNames(e)||"Hele familien")}${e.place?" · "+esc(e.place):""}</span></button>${mapA(e)}</div>`;
-  if(nxt) h+=`<div class="cardw"><button class="td-next" data-ev="${esc(nxt.id)}"><span class="k">Neste · ${until(toMin(nxt.start)-nm)}</span><span class="v">${esc(nxt.start)} ${esc(nxt.title)}</span><span class="s">${esc(whoNames(nxt)||"Hele familien")}${nxt.place?" · "+esc(nxt.place):""}</span></button>${mapA(nxt)}</div>`;
+  h+=msgsBlock(d);
   const shown=S.showPast?list:rest;
-  if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,nxt))).join("")}</div>`;
+  if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,null))).join("")}</div>`;
   else h+=`<div class="td-done">${list.length?"Ingen flere avtaler i dag.":(isToday?"Ingen avtaler i dag.":"Ingen avtaler denne dagen.")}</div>`;
   if(past.length) h+=`<button class="fold" data-act="past">${S.showPast?"Skjul ferdige":`✓ ${past.length} ${past.length===1?"ferdig avtale":"ferdige avtaler"} i dag · vis`}</button>`;
-  const tl=eventsOn(addDays(d,1));
-  h+=`<div class="tm"><b>${isToday?"I morgen":cap(fmt({weekday:"long"}).format(addDays(d,1)))}</b>${tl.length?tl.map(e=>`<span class="c" style="--pc:${colorOf(e)}" data-ev="${esc(e.id)}"><i></i><span>${esc(e.start||"hele dagen")}</span>${esc(e.title)}</span>`).join(""):`<span style="color:var(--muted)">Ingenting planlagt</span>`}</div>`;
+  h+=`<h2 class="sec-h">${isToday?"I morgen":cap(fDayLong.format(addDays(d,1)))}</h2>${tomorrowList(d)}`;
   if(S.events.some(e=>e.example)&&!S.readOnly) h+=`<button class="fold" data-act="clear-ex">Fjern eksempelavtalene</button>`;
   return h+`</div>`;
 }
@@ -813,6 +877,36 @@ function openEvent(e, fromSms){
 function drawWho(){
   $("#ev-who").innerHTML=S.members.map(m=>`<button type="button" data-who="${esc(m.id)}" aria-pressed="${S.editing.who.includes(m.id)}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
 }
+// ---------- beskjeder ----------
+const dNote=$("#dlg-note"); let noteEdit=null;
+function myMemberId(){ const first=(S.me&&S.me.user.name||"").split(/\s+/)[0].toLowerCase(); const m=S.members.find(x=>x.name.split(/\s+/)[0].toLowerCase()===first); return m?m.id:(S.members[0]&&S.members[0].id)||""; }
+function openNote(n){
+  noteEdit=n?{...n}:{id:"n"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),who:myMemberId(),text:"",date:iso(S.board?today():S.anchor)};
+  const isNew=!(S.notes||[]).some(x=>x.id===noteEdit.id);
+  $("#note-h").textContent=isNew?"Ny beskjed":"Beskjed";
+  $("#note-text").value=noteEdit.text; $("#note-date").value=noteEdit.date; drawNoteWho();
+  const del=$("#note-del"); del.hidden=isNew||S.readOnly; del.textContent="Slett"; del.dataset.armed="";
+  dNote.showModal(); setTimeout(()=>$("#note-text").focus(),30);
+}
+function drawNoteWho(){ $("#note-who").innerHTML=S.members.map(m=>`<button type="button" data-nw="${esc(m.id)}" aria-pressed="${noteEdit.who===m.id}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join(""); }
+$("#note-who").addEventListener("click",e=>{ const b=e.target.closest("[data-nw]"); if(!b) return; noteEdit.who=b.dataset.nw; drawNoteWho(); });
+$("#noteform").addEventListener("submit",async ev=>{
+  ev.preventDefault(); if(S.readOnly) return;
+  const text=$("#note-text").value.trim(), date=$("#note-date").value;
+  if(!text||!date){ toast("Skriv en beskjed og velg dag"); return; }
+  const n={...noteEdit,text,date,created:noteEdit.created||Date.now()}; dNote.close();
+  S.notes=S.notes||[]; const i=S.notes.findIndex(x=>x.id===n.id); const prev=i>=0?S.notes[i]:null;
+  if(i>=0) S.notes[i]=n; else S.notes.push(n); render();
+  try{ const b={...n}; delete b.id; await api("/api/notes/"+encodeURIComponent(n.id),{method:"PUT",body:b}); toast("Beskjeden ligger på tavla"); }
+  catch(err){ if(prev) S.notes[i]=prev; else S.notes=S.notes.filter(x=>x.id!==n.id); render(); if(err.status!==401) toast(err.error); }
+});
+$("#note-del").addEventListener("click",async function(){
+  if(!this.dataset.armed){ this.dataset.armed="1"; this.textContent="Trykk igjen for å slette"; return; }
+  const id=noteEdit.id; dNote.close(); const prev=S.notes.slice(); S.notes=S.notes.filter(x=>x.id!==id); render();
+  try{ await api("/api/notes/"+encodeURIComponent(id),{method:"DELETE"}); toast("Beskjeden er fjernet"); }
+  catch(err){ S.notes=prev; render(); if(err.status!==401) toast(err.error); }
+});
+
 // ---------- stedssøk ----------
 let placeSession="", placeT=null, placeSeq=0, placeItems=[], placeIdx=-1;
 function drawPlaceMeta(){
@@ -1002,12 +1096,13 @@ function step(n){ const a=S.anchor; if(S.view==="day") S.anchor=addDays(a,n); el
 $("#open-new").addEventListener("click",()=>openEvent(null));
 $("#open-sms").addEventListener("click",()=>openSms(""));
 document.addEventListener("click",e=>{
+  const nt=e.target.closest("[data-note]"); if(nt){ const n=(S.notes||[]).find(z=>z.id===nt.dataset.note); if(n) openNote(n); return; }
   const ev=e.target.closest("[data-ev]"); if(ev){ const x=S.events.find(z=>z.id===ev.dataset.ev); if(x) openEvent(x); return; }
   const g=e.target.closest("[data-goday]"); if(g && !e.target.closest("dialog")){ S.anchor=parseISO(g.dataset.goday); S.view="day"; render(); window.scrollTo({top:0}); return; }
   const mem=e.target.closest("[data-mem]"); if(mem){ const id=mem.dataset.mem; S.hidden.has(id)?S.hidden.delete(id):S.hidden.add(id); render(); return; }
   if(e.target.closest("#edit-fam")){ openFam(); return; }
   const act=e.target.closest("[data-act]"); if(act){ const a=act.dataset.act;
-    if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
+    if(a==="note"){ openNote(null); } else if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
 });
 document.addEventListener("paste",e=>{
   if(e.target.closest("input,textarea,dialog")||S.readOnly) return;
@@ -1022,9 +1117,7 @@ function whoNames(e){ return (e.who||[]).map(member).filter(Boolean).map(m=>m.na
 function renderBoard(){
   const el=$("#board"); const d=today(); const now=new Date(); const nm=now.getHours()*60+now.getMinutes();
   const list=eventsOn(d);
-  const cur=list.filter(e=>e.start && toMin(e.start)<=nm && nm<endMin(e));
-  const nxt=list.find(e=>e.start && toMin(e.start)>nm);
-  const state=e=>!e.start?"":(endMin(e)<=nm?"past":(toMin(e.start)<=nm?"cur":(nxt&&e.id===nxt.id?"nxt":"")));
+  const state=e=>!e.start?"":(endMin(e)<=nm?"past":(toMin(e.start)<=nm?"cur":""));
   const ids=S.members.filter(m=>!S.hidden.has(m.id)).map(m=>m.id);
   const shared=e=>!(e.who&&e.who.length) || (ids.length>1 && ids.every(id=>e.who.includes(id)));
   const cols=[];
@@ -1034,23 +1127,19 @@ function renderBoard(){
   const card=e=>`<button class="bd-ev ${state(e)}" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}">
       <span class="t">${e.start?esc(e.start):"Hele dagen"}${e.end?`<small>–${esc(e.end)}</small>`:""}</span>
       <span class="x">${esc(e.title)}</span>${e.place?`<span class="p">${esc(e.place)}</span>`:""}${e.note?`<span class="p">${esc(e.note)}</span>`:""}</button>`;
-  let band="";
-  for(const e of cur) band+=`<div class="bd-card cur"><div class="k">Nå${e.end?" · til "+esc(e.end):""}</div><div class="v">${esc(e.title)}</div><div class="s">${esc(whoNames(e)||"Hele familien")}${e.place?" · "+esc(e.place):""}</div></div>`;
-  if(nxt) band+=`<div class="bd-card"><div class="k">Neste · ${until(toMin(nxt.start)-nm)}</div><div class="v">${esc(nxt.start)} ${esc(nxt.title)}</div><div class="s">${esc(whoNames(nxt)||"Hele familien")}${nxt.place?" · "+esc(nxt.place):""}</div></div>`;
-  if(!band) band=`<div class="bd-card"><div class="k">Resten av dagen</div><div class="v">${list.length?"Ingen flere avtaler i dag":"Ingen avtaler i dag"}</div></div>`;
-  const tl=eventsOn(addDays(d,1));
-  const tm=tl.length?tl.map(e=>`<span class="c" style="--pc:${colorOf(e)}"><i></i><span>${esc(e.start||"hele dagen")}</span>${esc(e.title)}</span>`).join(""):`<span style="color:var(--muted)">Ingenting planlagt</span>`;
   const fs=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  const ns=notesOn(d);
   el.innerHTML = !S.loaded ? `<div class="empty"><b>Henter familiens kalender …</b></div>` : `
-    <div class="bd-top">
-      <div class="bd-clock"><b>${pad(now.getHours())}:${pad(now.getMinutes())}</b><span>${cap(fDayLong.format(d))} <em>· uke ${isoWeek(d)}</em></span></div>
-      <div class="bd-now">${band}</div>
-      <div class="bd-ctl">${fsSupported()?`<button class="btn" id="bd-fs">${fs?"Avslutt fullskjerm":"Fullskjerm"}</button>`:""}<button class="btn ghost" id="bd-close">Lukk tavle</button></div>
+    <div class="bd-head">
+      <div class="bd-title"><h1>I dag</h1><p>${cap(fDayLong.format(d))} · uke ${isoWeek(d)}</p></div>
+      <div class="bd-right"><div class="bd-time">${pad(now.getHours())}:${pad(now.getMinutes())}</div>
+        <div class="bd-btns">${S.readOnly?"":`<button class="btn sms" data-act="note">+ Beskjed</button>`}${fsSupported()?`<button class="btn" id="bd-fs">${fs?"Avslutt fullskjerm":"Fullskjerm"}</button>`:""}<button class="btn ghost" id="bd-close">Lukk tavle</button></div></div>
     </div>
     ${statusMsg?`<div class="status">${esc(statusMsg)}</div>`:""}
-    ${window.innerWidth<700 ? `<div class="bd-list">${list.length?`<div class="rows">${list.map(e=>evRow(e,rowState(e,true,nm,nxt))).join("")}</div>`:`<div class="bd-free">Ingen avtaler i dag</div>`}</div>` :
+    ${ns.length?`<div class="bd-msgs">${ns.map(noteHtml).join("")}</div>`:""}
+    ${window.innerWidth<700 ? `<div class="bd-list">${list.length?`<div class="rows">${list.map(e=>evRow(e,rowState(e,true,nm,null))).join("")}</div>`:`<div class="bd-free">Ingen avtaler i dag</div>`}</div>` :
     `<div class="bd-cols" style="--cols:${Math.min(Math.max(cols.length,1),6)}">${cols.map(c=>`<section class="bd-col" style="--pc:${c.pc}"><h2>${esc(c.name)}<small>${c.items.length||""}</small></h2>${c.items.length?c.items.map(card).join(""):`<div class="bd-free">Fri i dag</div>`}</section>`).join("")}</div>`}
-    <div class="bd-tm"><b>I morgen</b>${tm}</div>`;
+    <section class="bd-tmsec"><h2>I morgen</h2>${tomorrowList(d)}</section>`;
 }
 function fsSupported(){ const r=document.documentElement; return !!(r.requestFullscreen||r.webkitRequestFullscreen); }
 let wakeLock=null;

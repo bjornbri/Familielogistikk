@@ -63,6 +63,13 @@ async function migrate() {
       expires_at timestamptz not null,
       used_at timestamptz
     );
+    create table if not exists notes (
+      id text not null,
+      family_id uuid not null references families(id) on delete cascade,
+      data jsonb not null,
+      updated_at timestamptz not null default now(),
+      primary key (family_id, id)
+    );
     create table if not exists events (
       id text not null,
       family_id uuid not null references families(id) on delete cascade,
@@ -303,6 +310,38 @@ function cleanEvent(b) {
   return o;
 }
 
+// Beskjeder: short messages from a family member that show on the board for one day
+function cleanNote(b) {
+  return {
+    date: /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : "",
+    who: clean(String(b.who || ""), 40),
+    text: clean(b.text, 280),
+    created: Number(b.created) || Date.now(),
+  };
+}
+app.get("/api/notes", wrap(auth), wrap(async (req, res) => {
+  const { rows } = await pool.query(
+    `select id, data from notes where family_id = $1 and data->>'date' >= to_char(now() - interval '7 days', 'YYYY-MM-DD')`,
+    [req.user.family_id]
+  );
+  res.json({ notes: rows.map((r) => ({ id: r.id, ...r.data })) });
+}));
+app.put("/api/notes/:id", wrap(auth), wrap(async (req, res) => {
+  const id = clean(req.params.id, 60);
+  const data = cleanNote(req.body || {});
+  if (!id || !data.text || !data.date) return res.status(400).json({ error: "Beskjeden må ha tekst og dato." });
+  await pool.query(
+    `insert into notes (id, family_id, data, updated_at) values ($1, $2, $3, now())
+     on conflict (family_id, id) do update set data = excluded.data, updated_at = now()`,
+    [id, req.user.family_id, JSON.stringify(data)]
+  );
+  res.json({ ok: true });
+}));
+app.delete("/api/notes/:id", wrap(auth), wrap(async (req, res) => {
+  await pool.query(`delete from notes where family_id = $1 and id = $2`, [req.user.family_id, clean(req.params.id, 60)]);
+  res.json({ ok: true });
+}));
+
 app.get("/api/events", wrap(auth), wrap(async (req, res) => {
   const { rows } = await pool.query(`select id, data from events where family_id = $1`, [req.user.family_id]);
   res.json({ events: rows.map((r) => ({ id: r.id, ...r.data })) });
@@ -431,7 +470,7 @@ app.use((err, req, res, next) => {
 
 // Expired sessions/invites are cleaned up hourly
 setInterval(() => {
-  pool.query(`delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'`).catch(() => {});
+  pool.query(`delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD')`).catch(() => {});
 }, 3600e3);
 
 migrate()
