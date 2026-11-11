@@ -7,6 +7,9 @@ const crypto = require("crypto");
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
+const dns = require("dns").promises;
+const net = require("net");
+const ical = require("node-ical");
 
 const PORT = process.env.PORT || 3000;
 const PROD = process.env.NODE_ENV === "production";
@@ -62,6 +65,17 @@ async function migrate() {
       created_by uuid references users(id) on delete set null,
       expires_at timestamptz not null,
       used_at timestamptz
+    );
+    create table if not exists feeds (
+      id uuid primary key default gen_random_uuid(),
+      family_id uuid not null references families(id) on delete cascade,
+      name text not null,
+      url text not null,
+      who jsonb not null default '[]',
+      last_sync timestamptz,
+      last_error text,
+      event_count int not null default 0,
+      created_at timestamptz not null default now()
     );
     create table if not exists notes (
       id text not null,
@@ -349,6 +363,7 @@ app.get("/api/events", wrap(auth), wrap(async (req, res) => {
 
 app.put("/api/events/:id", wrap(auth), wrap(async (req, res) => {
   const id = clean(req.params.id, 60);
+  if (id.startsWith("f_")) return res.status(400).json({ error: "Avtaler fra et kalenderabonnement endres i kilden, for eksempel i Spond." });
   const data = cleanEvent(req.body || {});
   if (!id || !data.title || !data.date) return res.status(400).json({ error: "Avtalen må ha tittel og dato." });
   const count = await pool.query(`select count(*)::int as n from events where family_id = $1`, [req.user.family_id]);
@@ -362,6 +377,7 @@ app.put("/api/events/:id", wrap(auth), wrap(async (req, res) => {
 }));
 
 app.delete("/api/events/:id", wrap(auth), wrap(async (req, res) => {
+  if (clean(req.params.id, 60).startsWith("f_")) return res.status(400).json({ error: "Avtaler fra et kalenderabonnement slettes i kilden." });
   await pool.query(`delete from events where family_id = $1 and id = $2`, [req.user.family_id, clean(req.params.id, 60)]);
   res.json({ ok: true });
 }));
@@ -457,6 +473,157 @@ app.get("/api/places/:id", throttle(200, 60 * 60e3), wrap(auth), wrap(async (req
   const p = await r.json();
   res.json({ placeId: p.id, name: p.displayName?.text || "", address: p.shortFormattedAddress || p.formattedAddress || "", mapsUrl: p.googleMapsUri || "" });
 }));
+
+// ---------- Kalenderabonnement (iCal/ICS), f.eks. Spond via Google- eller iCloud-kalender ----------
+const FEED_PAST_DAYS = 14, FEED_FUTURE_DAYS = 120, FEED_MAX_EVENTS = 1500;
+const osloFmt = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+function oslo(d) { const s = osloFmt.format(d).replace(",", ""); return { date: s.slice(0, 10), time: s.slice(11, 16) }; }
+function ymd(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+
+function normalizeFeedUrl(u) {
+  u = clean(u, 1000).replace(/^webcals?:\/\//i, "https://");
+  let url; try { url = new URL(u); } catch { return null; }
+  if (!/^https?:$/.test(url.protocol)) return null;
+  return url.toString();
+}
+function privateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split(".").map(Number);
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  const l = ip.toLowerCase();
+  return l === "::1" || l.startsWith("fc") || l.startsWith("fd") || l.startsWith("fe80") || l.startsWith("::ffff:127.") || l.startsWith("::ffff:10.") || l.startsWith("::ffff:192.168.");
+}
+async function fetchIcs(urlStr) {
+  const url = new URL(urlStr);
+  if (!process.env.ALLOW_PRIVATE_FEEDS) {
+    const addrs = await dns.lookup(url.hostname, { all: true }).catch(() => []);
+    if (!addrs.length) throw new Error("Fant ikke adressen. Sjekk lenken.");
+    if (addrs.some((a) => privateIp(a.address))) throw new Error("Lenken peker til en intern adresse og kan ikke brukes.");
+  }
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(urlStr, { signal: ctl.signal, redirect: "follow", headers: { "User-Agent": "Familielogistikk/0.1 (kalenderabonnement)", Accept: "text/calendar,*/*" } });
+    if (!r.ok) throw new Error(r.status === 404 ? "Kalenderen finnes ikke (404). Sjekk lenken." : r.status === 401 || r.status === 403 ? "Kalenderen er ikke delt (ingen tilgang). Bruk den hemmelige/offentlige iCal-lenken." : `Kalenderen svarte med feil ${r.status}.`);
+    const text = await r.text();
+    if (text.length > 8e6) throw new Error("Kalenderen er for stor.");
+    if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error("Lenken er ikke en iCal-kalender. Bruk lenken som slutter på .ics.");
+    return text;
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("Kalenderen svarte ikke i tide.");
+    if (e.message === "fetch failed" || e.cause) throw new Error("Får ikke kontakt med kalenderen. Sjekk at lenken er riktig og delt.");
+    throw e;
+  } finally { clearTimeout(t); }
+}
+function feedEventsFromIcs(text) {
+  const data = ical.sync.parseICS(text);
+  const from = new Date(Date.now() - FEED_PAST_DAYS * 864e5), to = new Date(Date.now() + FEED_FUTURE_DAYS * 864e5);
+  const out = [];
+  const push = (ev, start, end) => {
+    if (out.length >= FEED_MAX_EVENTS || !start) return;
+    const allDay = ev.datetype === "date" || (start && ev.start && ev.start.dateOnly);
+    let date, st = "", en = "";
+    if (allDay) { date = ymd(start); }
+    else { const s = oslo(start); date = s.date; st = s.time; if (end) { const e = oslo(end); if (e.date === s.date) en = e.time; } }
+    const title = typeof ev.summary === "string" ? ev.summary : (ev.summary && ev.summary.val) || "";
+    const place = typeof ev.location === "string" ? ev.location : (ev.location && ev.location.val) || "";
+    const desc = typeof ev.description === "string" ? ev.description : (ev.description && ev.description.val) || "";
+    out.push({ uid: String(ev.uid || title) + "|" + date + st, title: clean(title, 120) || "Avtale", date, start: st, end: en, place: clean(place, 200), note: clean(desc.replace(/\s+/g, " "), 300) });
+  };
+  for (const k of Object.keys(data)) {
+    const ev = data[k];
+    if (!ev || ev.type !== "VEVENT" || !ev.start) continue;
+    if (ev.status && String(ev.status).toUpperCase() === "CANCELLED") continue;
+    const dur = ev.end ? ev.end - ev.start : 0;
+    if (ev.rrule) {
+      let occ = [];
+      try { occ = ev.rrule.between(from, to, true); } catch { occ = []; }
+      for (const o of occ) {
+        const key = o.toISOString().slice(0, 10);
+        if (ev.exdate && (ev.exdate[key] || Object.values(ev.exdate).some((x) => x && x.getTime && x.getTime() === o.getTime()))) continue;
+        const ov = ev.recurrences && ev.recurrences[key];
+        if (ov) { if (ov.start && ov.start >= from && ov.start <= to) push(ov, ov.start, ov.end); continue; }
+        push(ev, o, dur ? new Date(o.getTime() + dur) : null);
+      }
+    } else if (ev.start >= from && ev.start <= to) {
+      push(ev, ev.start, ev.end);
+    }
+  }
+  return out;
+}
+async function syncFeed(feed) {
+  try {
+    const text = await fetchIcs(feed.url);
+    const evs = feedEventsFromIcs(text);
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(`delete from events where family_id = $1 and data->>'source' = $2`, [feed.family_id, feed.id]);
+      for (const e of evs) {
+        const id = "f_" + sha(feed.id + e.uid).slice(0, 24);
+        const data = { title: e.title, date: e.date, start: e.start, end: e.end, who: feed.who || [], place: e.place, note: e.note, remind: "", repeat: "", source: feed.id, sourceName: feed.name, created: 0 };
+        await client.query(`insert into events (id, family_id, data, updated_at) values ($1, $2, $3, now()) on conflict (family_id, id) do update set data = excluded.data, updated_at = now()`, [id, feed.family_id, JSON.stringify(data)]);
+      }
+      await client.query(`update feeds set last_sync = now(), last_error = null, event_count = $2 where id = $1`, [feed.id, evs.length]);
+      await client.query("commit");
+    } catch (e) { await client.query("rollback").catch(() => {}); throw e; } finally { client.release(); }
+    return { ok: true, count: evs.length };
+  } catch (e) {
+    const msg = e && e.message ? e.message.slice(0, 300) : "Ukjent feil";
+    await pool.query(`update feeds set last_sync = now(), last_error = $2 where id = $1`, [feed.id, msg]).catch(() => {});
+    return { ok: false, error: msg };
+  }
+}
+const feedRow = (f) => ({ id: f.id, name: f.name, who: f.who, host: (() => { try { return new URL(f.url).hostname; } catch { return ""; } })(), lastSync: f.last_sync, error: f.last_error, count: f.event_count });
+
+app.get("/api/feeds", wrap(auth), wrap(async (req, res) => {
+  const { rows } = await pool.query(`select * from feeds where family_id = $1 order by created_at`, [req.user.family_id]);
+  res.json({ feeds: rows.map(feedRow) });
+}));
+app.post("/api/feeds", throttle(20, 60 * 60e3), wrap(auth), wrap(async (req, res) => {
+  const url = normalizeFeedUrl(req.body.url);
+  const name = clean(req.body.name, 40) || "Kalender";
+  const who = Array.isArray(req.body.who) ? req.body.who.map((x) => clean(String(x), 40)).slice(0, 20) : [];
+  if (!url) return res.status(400).json({ error: "Lim inn en gyldig iCal-lenke (begynner med https:// eller webcal://)." });
+  const count = await pool.query(`select count(*)::int n from feeds where family_id = $1`, [req.user.family_id]);
+  if (count.rows[0].n >= 10) return res.status(400).json({ error: "Maks 10 kalenderabonnement per familie." });
+  const { rows } = await pool.query(`insert into feeds (family_id, name, url, who) values ($1, $2, $3, $4) returning *`, [req.user.family_id, name, url, JSON.stringify(who)]);
+  const r = await syncFeed(rows[0]);
+  if (!r.ok) { await pool.query(`delete from feeds where id = $1`, [rows[0].id]); return res.status(400).json({ error: r.error }); }
+  const f = await pool.query(`select * from feeds where id = $1`, [rows[0].id]);
+  res.json({ feed: feedRow(f.rows[0]), count: r.count });
+}));
+app.post("/api/feeds/:id/sync", throttle(30, 60 * 60e3), wrap(auth), wrap(async (req, res) => {
+  const { rows } = await pool.query(`select * from feeds where id::text = $1 and family_id = $2`, [clean(req.params.id, 60), req.user.family_id]);
+  if (!rows[0]) return res.status(404).json({ error: "Fant ikke abonnementet." });
+  const r = await syncFeed(rows[0]);
+  if (!r.ok) return res.status(502).json({ error: r.error });
+  res.json({ ok: true, count: r.count });
+}));
+app.delete("/api/feeds/:id", wrap(auth), wrap(async (req, res) => {
+  const id = clean(req.params.id, 60);
+  const { rows } = await pool.query(`delete from feeds where id::text = $1 and family_id = $2 returning id`, [id, req.user.family_id]);
+  if (rows[0]) await pool.query(`delete from events where family_id = $1 and data->>'source' = $2`, [req.user.family_id, id]);
+  res.json({ ok: true });
+}));
+
+// Synkroniser alle abonnement hvert 30. minutt
+let feedsRunning = false;
+async function syncAllFeeds() {
+  if (feedsRunning) return; feedsRunning = true;
+  try {
+    const { rows } = await pool.query(`select * from feeds where last_sync is null or last_sync < now() - interval '25 minutes'`);
+    for (const f of rows) await syncFeed(f);
+  } catch (e) { console.error("Feed-synk", e.message); } finally { feedsRunning = false; }
+}
+setInterval(syncAllFeeds, 30 * 60e3);
+setTimeout(syncAllFeeds, 20e3);
+
+// Lokale filer for tekstgjenkjenning (OCR) i nettleseren
+const vendorOpts = { maxAge: PROD ? "30d" : 0, immutable: PROD };
+app.use("/vendor/tesseract", express.static(path.join(__dirname, "node_modules/tesseract.js/dist"), vendorOpts));
+app.use("/vendor/tesseract-core", express.static(path.join(__dirname, "node_modules/tesseract.js-core"), vendorOpts));
+app.use("/vendor/lang", express.static(path.join(__dirname, "node_modules/@tesseract.js-data/nor/4.0.0"), vendorOpts));
 
 app.get("/healthz", (req, res) => res.send("ok"));
 

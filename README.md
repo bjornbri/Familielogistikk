@@ -9,7 +9,9 @@ Har uke- og månedsvisning, en fullskjermtavle for nettbrett/vegg, og avtaler ka
 - Én familie per konto. Den som registrerer seg først, oppretter familien.
 - **Inviter familiemedlemmer:** «Familie» → «Lag invitasjonslenke». Lenken virker én gang og gjelder i 7 dager.
 - Alle i familien ser og redigerer de samme avtalene. Endringer hentes hvert 30. sekund.
-- SMS-tolkning skjer i nettleseren. Lesing fra **bilder** krever `ANTHROPIC_API_KEY` på serveren (valgfritt).
+- SMS-tolkning skjer i nettleseren.
+- **Skjermbilder** leses gratis med tekstgjenkjenning (Tesseract, norsk) i nettleseren og tolkes av samme tolker som SMS. Bare hvis dato eller tid mangler, og `ANTHROPIC_API_KEY` er satt, spørres AI. Knappen «Les med AI i stedet» gjør det manuelt.
+- **Kalenderabonnement:** lim inn en iCal-lenke (Spond via Google- eller iCloud-kalender, skolen, Google Kalender). Serveren henter avtalene hver halvtime, 14 dager bakover og 120 dager fremover, inkludert gjentakelser.
 - **Stedssøk:** skriv «holmen svømme» i Sted-feltet og velg fra forslagene. Avtalen får adresse og lenke til Google Maps. Krever `GOOGLE_MAPS_API_KEY` (valgfritt). Uten nøkkel får alle steder likevel en «Åpne i Google Maps»-lenke basert på teksten.
 - Kan legges til på Hjem-skjermen på iPhone/Android og åpnes som en app (web-manifest).
 

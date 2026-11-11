@@ -459,6 +459,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
     </div>
     <footer>
       <button type="button" class="btn" data-close>Avbryt</button>
+      <button type="button" class="btn" id="sms-ai" hidden>Les med AI i stedet</button>
       <button type="button" class="btn sms" id="sms-go" disabled>Lag avtale</button>
     </footer>
   </div>
@@ -484,6 +485,22 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
   <div class="dlg">
     <header><h2>Familie og konto</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
     <div class="body"><div id="fam-body" style="display:flex;flex-direction:column;gap:12px"></div>
+      <div class="acct" id="feeds-sec">
+        <h3>Kalenderabonnement (Spond, skole, Google)</h3>
+        <p style="margin:0;font-size:.88rem;color:var(--muted)">Lim inn en iCal-lenke. Avtalene hentes automatisk hver halvtime. <button type="button" class="fold" id="feed-help-btn" style="padding:0;text-decoration:underline">Slik får du lenke fra Spond</button></p>
+        <div id="feed-help" hidden style="font-size:.86rem;background:var(--bg);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+          <b>Spond via Google-kalender (Android og iPhone)</b>
+          <span>1. Lag en egen kalender i Google Kalender, f.eks. «Spond».<br>2. I Spond: profilbilde → Kalenderinnstillinger → velg denne kalenderen.<br>3. I Google Kalender på PC: Innstillinger → kalenderen → «Hemmelig adresse i iCal-format». Kopier lenken og lim den inn her.</span>
+          <b>Spond via iCloud (iPhone)</b>
+          <span>1. Lag en iCloud-kalender «Spond» i Kalender-appen og velg den i Spond under Kalenderinnstillinger.<br>2. I Kalender-appen: trykk ⓘ ved kalenderen → slå på «Offentlig kalender» → Del lenke → Kopier. Lim inn her.</span>
+        </div>
+        <ul id="feed-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px"></ul>
+        <label class="f">Navn<input id="feed-name" placeholder="F.eks. Spond, Skolen"></label>
+        <label class="f">iCal-lenke<input id="feed-url" inputmode="url" autocomplete="off" placeholder="https://… eller webcal://…"></label>
+        <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--muted)">Gjelder<div class="pick" id="feed-who"></div></div>
+        <p class="auth-err" id="feed-err" hidden></p>
+        <div><button type="button" class="btn sms" id="feed-add">Legg til abonnement</button></div>
+      </div>
       <div class="acct">
         <h3>Inviter familiemedlem</h3>
         <p style="margin:0;font-size:.88rem;color:var(--muted)">Lag en lenke og send den på SMS. Lenken virker én gang og gjelder i 7 dager.</p>
@@ -579,7 +596,7 @@ async function api(path,opts={}){
 function applyMe(me){
   S.me=me; imgEnabled=!!me.imageReading; placesEnabled=!!me.placesSearch;
   if(Array.isArray(me.family.members)&&me.family.members.length) S.members=me.family.members;
-  $("#img-zone").hidden=!imgEnabled; $("#img-or").hidden=!imgEnabled;
+  $("#img-zone").hidden=false; $("#img-or").hidden=false;
 }
 async function loadEvents(){
   const [j,n]=await Promise.all([api("/api/events"),api("/api/notes").catch(()=>({notes:S.notes||[]}))]);
@@ -743,6 +760,47 @@ function parseSms(raw){
   return out;
 }
 
+// Tolker for lengre tekst (OCR fra skjermbilder, Spond, e-post): ser på linjer før den vanlige tolkeren
+function cleanLine(l){ return l.replace(/^[^\wÆØÅæøå"«(]+/,"").replace(/\s+/g," ").trim(); }
+function parseRich(raw){
+  const lines=raw.split(/\r?\n/).map(cleanLine).filter(l=>l.length>1);
+  const notes=[]; const keep=[];
+  let deadline="";
+  for(const l of lines){
+    if(/^svar(frist| innen)|^frist|påmeldingsfrist/i.test(l)){ deadline=l.replace(/^svar innen:?\s*/i,"Svarfrist: "); continue; }
+    keep.push(l);
+  }
+  const prefer=keep.find(l=>/^oppmøte|^tid(spunkt)?\s*:|^dato\s*:|^når\s*:|^time\s*:/i.test(l));
+  // Base: hele teksten uten svarfrist, men med foretrukket linje først
+  const base=parseSms((prefer?prefer+"\n":"")+keep.join("\n"));
+  const out={...base, raw};
+  if(prefer){ const p=parseSms(prefer); if(p.date) out.date=p.date; if(p.start) out.start=p.start; }
+  const sl=keep.find(l=>/slutter|ferdig\s+(kl|ca)|til\s+kl/i.test(l));
+  if(sl){ const m=sl.match(/(?:slutter|ferdig|til)\s*(?:ca\.?\s*)?(?:kl\.?\s*)?(\d{1,2})[:.](\d{2})/i); if(m&&+m[1]<24) out.end=pad(m[1])+":"+m[2]; }
+  const st=keep.find(l=>/^starter\s/i.test(l)); if(st){ const m=st.match(/starter\s*(?:kl\.?\s*)?(\d{1,2})[:.](\d{2})/i); if(m&&prefer) notes.push("Starter "+pad(m[1])+":"+m[2]); else if(m&&!out.start) out.start=pad(m[1])+":"+m[2]; }
+  // Tittel: linjen før «Arrangør:» (Spond), ellers første linje som ser ut som en tittel
+  const ai=keep.findIndex(l=>/^arrangør/i.test(l));
+  const looksTitle=l=>/[a-zæøå]{3}/i.test(l)&&l.length<=60&&!/\d{1,2}[:.]\d{2}|^(arrangør|oppmøte|starter|svar|beskrivelse|hjem|varsler|påminnelse|hei)\b/i.test(l)&&!/[|=$£€]/.test(l);
+  if(ai>0 && looksTitle(keep[ai-1])) out.title=keep[ai-1];
+  else if(!KEYWORDS.some(([re])=>re.test(raw))){ const t=keep.find(l=>looksTitle(l)&&l.split(" ").length<=7&&/[a-zæøå]/.test(l)); if(t && lines.length>2) out.title=t; }
+  // Adresse: «Gatenavn 12, Sted» – stedsnavnet står ofte linjen over
+  const adrI=keep.findIndex(l=>/[A-Za-zÆØÅæøå]{3,}\s\d{1,4}[A-Za-z]?,\s*(\d{4}\s)?[A-ZÆØÅ][a-zæøå]+/.test(l));
+  if(adrI>=0){
+    const adr=keep[adrI].replace(/^.*?([A-ZÆØÅ][A-Za-zÆØÅæøå.\- ]+\s\d{1,4}[A-Za-z]?,\s*(\d{4}\s)?[A-ZÆØÅ][\wæøå\- ]+).*$/,"$1").trim();
+    let name=""; for(let j=adrI-1;j>=0&&j>=adrI-2;j--){ const l=keep[j]; if(/[a-zæøå]{3}/i.test(l)&&!/\d{1,2}[:.]\d{2}|starter|slutter|oppmøte/i.test(l)&&l.length>3){ name=l; break; } }
+    out.place=name||adr; out.address=name?adr:"";
+  }
+  // «Svarer på vegne av» (Spond) → hvem
+  const vi=keep.findIndex(l=>/på vegne av/i.test(l));
+  if(vi>=0&&keep[vi+1]){ const nm=keep[vi+1].toLowerCase(); const m=S.members.find(x=>x.name&&nm.includes(x.name.toLowerCase().split(" ")[0])); if(m&&!(out.who||[]).includes(m.id)) out.who=[...(out.who||[]),m.id]; if(!m) out.whoNames=[keep[vi+1]]; }
+  const di=keep.findIndex(l=>/^beskrivelse$/i.test(l)); if(di>=0&&keep[di+1]) notes.push(keep[di+1].replace(/^["«]|["»]$/g,""));
+  const gi=keep.findIndex(l=>/^(gruppe|lag|klasse)\s*:/i.test(l)); if(gi>=0) notes.push(keep[gi]);
+  if(deadline) notes.push(deadline);
+  if(out.note) notes.unshift(out.note);
+  out.note=[...new Set(notes)].join(" · ").slice(0,240);
+  return out;
+}
+
 // ---------- render ----------
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let statusMsg="";
@@ -800,7 +858,7 @@ function initials(n){ const p=String(n).trim().split(/\s+/); return (p.length>1?
 function rowState(e,isToday,nm,nxt){ if(!isToday||!e.start) return ""; const st=toMin(e.start); if(endMin(e)<=nm) return "past"; if(st<=nm) return "cur"; return nxt&&nxt.id===e.id?"nxt":""; }
 function evRow(e,cls){
   const who=(e.who||[]).map(member).filter(Boolean);
-  const sub=[who.map(m=>m.name).join(", ")||"Hele familien", e.place].filter(Boolean).join(" · ");
+  const sub=[who.map(m=>m.name).join(", ")||"Hele familien", e.place, e.sourceName].filter(Boolean).join(" · ");
   return `<button class="r ${cls}" data-ev="${esc(e.id)}"><span class="rt">${e.start?esc(e.start):"Hele<br>dagen"}${e.end?`<small>–${esc(e.end)}</small>`:""}</span>
     <span class="rb"><b>${esc(e.title)}</b><span>${esc(sub)}</span></span>
     <span class="rw">${who.slice(0,3).map(m=>`<i style="--pc:var(--m${m.c})" title="${esc(m.name)}">${esc(initials(m.name))}</i>`).join("")}${who.length>3?`<i style="--pc:var(--muted)">+${who.length-3}</i>`:""}</span></button>`;
@@ -865,13 +923,16 @@ const dEv=$("#dlg-event");
 function openEvent(e, fromSms){
   S.editing = e && e.id ? {...e} : {id:uid(),title:"",date:iso(S.anchor),start:"",end:"",who:[],place:"",note:"",remind:"60",repeat:"",...(e||{})};
   const x=S.editing;
-  $("#ev-h").textContent = S.events.some(z=>z.id===x.id) ? "Endre avtale" : (fromSms?"Avtale fra SMS":"Ny avtale");
+  $("#ev-h").textContent = S.events.some(z=>z.id===x.id) ? "Endre avtale" : (fromSms?(String(x.sms||"").startsWith("Fra bilde")?"Avtale fra bilde":"Avtale fra SMS"):"Ny avtale");
   $("#ev-title").value=x.title||""; $("#ev-date").value=x.date||""; $("#ev-start").value=x.start||""; $("#ev-end").value=x.end||"";
   $("#ev-place").value=x.place||""; closePlaces(); placeErr(""); placeSession=""; drawPlaceMeta(); $("#ev-note").value=x.note||""; $("#ev-remind").value=x.remind||""; $("#ev-repeat").value=x.repeat||"";
   drawWho();
   const smsEl=$("#ev-sms"); if(x.sms){smsEl.hidden=false;smsEl.innerHTML=`<div class="f" style="font-size:.8rem;font-weight:700;color:var(--muted)">Original melding</div><div class="origsms">${esc(x.sms)}</div>`} else smsEl.hidden=true;
   const del=$("#ev-del"); del.hidden=!S.events.some(z=>z.id===x.id) || S.readOnly; del.textContent="Slett"; del.dataset.armed="";
-  $("#ev-save").disabled=S.readOnly;
+  const fromFeed=String(x.id).startsWith("f_");
+  $("#ev-save").disabled=S.readOnly||fromFeed;
+  if(fromFeed){ $("#ev-h").textContent="Fra "+(x.sourceName||"kalenderabonnement"); $("#ev-del").hidden=true;
+    const smsEl=$("#ev-sms"); smsEl.hidden=false; smsEl.innerHTML=`<div class="origsms">Denne avtalen hentes automatisk fra «${esc(x.sourceName||"abonnement")}». Endringer gjøres i kilden, for eksempel i Spond.</div>`; }
   dEv.showModal(); setTimeout(()=>$("#ev-title").focus(),30);
 }
 function drawWho(){
@@ -976,29 +1037,61 @@ $("#ev-del").addEventListener("click",function(){
 const dSms=$("#dlg-sms");
 function openSms(text){ clearImage(); imgStatus("eller lim inn / slipp et bilde her"); $("#sms-text").value=text||""; updateSms(); dSms.showModal(); setTimeout(()=>$("#sms-text").focus(),30); }
 function updateSms(){
-  const p=parseSms($("#sms-text").value); S.smsDraft=p; showDraft(p, !!p.raw.trim());
+  const p=parseRich($("#sms-text").value); S.smsDraft=p; showDraft(p, !!p.raw.trim());
 }
 function showDraft(p,has){
   const row=(k,v,miss)=>`<dt>${k}</dt><dd class="${v?"":"miss"}">${v?esc(v):miss}</dd>`;
-  $("#sms-found").innerHTML = has ? row("Hva",p.title,"Fant ikke, skriv selv")+row("Dato",p.date?cap(fDayLong.format(parseISO(p.date))):"","Fant ingen dato")+row("Tid",p.start?(p.start+(p.end?"–"+p.end:"")):"","Fant ingen klokkeslett")+row("Sted",p.place,"—")+row("Varsel",remindLabel(p.remind),"—")+(p.whoNames&&p.whoNames.length?row("Gjelder",p.whoNames.join(", "),""):"")+(p.note?row("Notat",p.note,""):"")
+  $("#sms-found").innerHTML = has ? row("Hva",p.title,"Fant ikke, skriv selv")+row("Dato",p.date?cap(fDayLong.format(parseISO(p.date))):"","Fant ingen dato")+row("Tid",p.start?(p.start+(p.end?"–"+p.end:"")):"","Fant ingen klokkeslett")+row("Sted",p.place?(p.place+(p.address?", "+p.address:"")):"","—")+row("Varsel",remindLabel(p.remind),"—")+(p.whoNames&&p.whoNames.length?row("Gjelder",p.whoNames.join(", "),""):"")+(p.note?row("Notat",p.note,""):"")
     : `<dt>Tips</dt><dd>Lim inn en SMS fra tannlegen, treneren, skolen eller verkstedet. Datoer som 12.11, «torsdag» og «17. november» blir forstått. Har du et skjermbilde fra Spond, e-post eller et skolebrev, bruk bildeknappen over.</dd>`;
   $("#sms-go").disabled=!has || S.readOnly;
+  $("#sms-ai").hidden=!(has && p.fromOcr && imgEnabled);
 }
 $("#sms-text").addEventListener("input",()=>{ clearImage(); updateSms(); });
 
 // ---------- image reading ----------
 function clearImage(){ const im=$("#img-prev"); if(!im.hidden){ try{URL.revokeObjectURL(im.src)}catch{} im.hidden=true; im.removeAttribute("src"); } if(imgCtl){imgCtl.abort();imgCtl=null} }
 function imgStatus(t,err){ const el=$("#img-status"); el.textContent=t; el.className=err?"err":""; }
+// Tekstgjenkjenning i nettleseren (gratis). Filene ligger på vår egen server under /vendor.
+let ocrWorker=null, ocrLoading=null, ocrProgress=null, lastImage=null;
+function loadScript(src){ return new Promise((ok,fail)=>{ const el=document.createElement("script"); el.src=src; el.onload=ok; el.onerror=()=>fail(new Error("load")); document.head.appendChild(el); }); }
+async function getOcr(){
+  if(ocrWorker) return ocrWorker;
+  if(!ocrLoading) ocrLoading=(async()=>{
+    if(!window.Tesseract) await loadScript("/vendor/tesseract/tesseract.min.js");
+    ocrWorker=await Tesseract.createWorker("nor",1,{workerPath:"/vendor/tesseract/worker.min.js",corePath:"/vendor/tesseract-core",langPath:"/vendor/lang",gzip:true,
+      logger:m=>{ if(ocrProgress&&m.status==="recognizing text") ocrProgress(Math.round((m.progress||0)*100)); }});
+    return ocrWorker;
+  })().catch(e=>{ ocrLoading=null; throw e; });
+  return ocrLoading;
+}
 async function readImage(file){
-  if(!imgEnabled){ imgStatus("Bildelesing er ikke slått på.",true); return; }
   if(!/^image\//.test(file.type)){ imgStatus("Velg et bilde eller skjermbilde.",true); return; }
   if(file.size>25e6){ imgStatus("Bildet er for stort. Prøv et skjermbilde i stedet.",true); return; }
-  clearImage(); $("#sms-text").value="";
+  clearImage(); $("#sms-text").value=""; lastImage=file;
   const im=$("#img-prev"); im.src=URL.createObjectURL(file); im.hidden=false;
-  S.smsDraft=null; $("#sms-go").disabled=true;
-  $("#sms-found").innerHTML='<dt>Leser</dt><dd>Claude leser bildet …</dd>'; imgStatus("Leser bildet …");
-  const t=today();
+  S.smsDraft=null; $("#sms-go").disabled=true; $("#sms-ai").hidden=true;
+  $("#sms-found").innerHTML='<dt>Leser</dt><dd>Leser teksten i bildet …</dd>'; imgStatus("Leser teksten i bildet …");
   imgCtl=new AbortController(); const ctl=imgCtl;
+  let text="";
+  try{
+    const w=await getOcr(); if(ctl!==imgCtl) return;
+    ocrProgress=pc=>{ if(ctl===imgCtl) imgStatus("Leser teksten i bildet … "+pc+" %"); };
+    const r=await w.recognize(file); text=(r&&r.data&&r.data.text)||"";
+  }catch(e){ text=""; }
+  finally{ ocrProgress=null; }
+  if(ctl!==imgCtl) return;
+  const p=parseRich(text); p.fromImage=true; p.fromOcr=true; p.summary="tekstlest skjermbilde"; if(p.remind==="60") p.remind="evening";
+  const enough=p.date && p.start && p.title;
+  if(!enough && imgEnabled){ imgStatus("Fant ikke alt i teksten. Spør AI …"); return readImageAI(file,ctl); }
+  if(!text.trim()){ $("#sms-found").innerHTML=`<dt>Feil</dt><dd class="miss">Fant ingen tekst i bildet. Prøv et skarpere skjermbilde, eller skriv avtalen inn selv.</dd>`; imgStatus("Fant ingen tekst.",true); return; }
+  S.smsDraft=p; showDraft(p,true);
+  imgStatus(enough?"Ferdig lest. Sjekk feltene og trykk «Lag avtale».":"Noe mangler. Sjekk feltene og fyll inn resten etterpå.");
+  if(p.whoNames&&p.whoNames.length) imgStatus("Ferdig lest. "+p.whoNames.join(", ")+" finnes ikke i familien ennå. Legg til under «Rediger familien».");
+}
+async function readImageAI(file,ctlIn){
+  imgCtl=ctlIn||new AbortController(); const ctl=imgCtl;
+  $("#sms-found").innerHTML='<dt>Leser</dt><dd>AI leser bildet …</dd>'; $("#sms-go").disabled=true; $("#sms-ai").hidden=true;
+  const t=today();
   try{
     const image=await shrinkImage(file);
     const r=await api("/api/read-image",{method:"POST",body:{image,mediaType:"image/jpeg",today:iso(t),weekday:fmt({weekday:"long"}).format(t)}});
@@ -1017,15 +1110,8 @@ async function readImage(file){
     if(unmatched.length) imgStatus("Ferdig lest. "+unmatched.join(", ")+" finnes ikke i familien ennå. Legg til under «Rediger familien».");
   }catch(e){
     if(ctl!==imgCtl) return;
-    if(e && e.error){ $("#sms-found").innerHTML=`<dt>Feil</dt><dd class="miss">${esc(e.error)}</dd>`; imgStatus(e.error,true); return; }
-    const msg={not_granted:"Du må tillate at siden bruker Claude for å lese bilder.",images_unavailable:"Bildelesing er ikke tilgjengelig her.",
-      image_rejected:"Bildet kunne ikke leses. Prøv et annet bilde eller et skjermbilde.",rate_limited:"For mange forespørsler akkurat nå. Prøv igjen om litt.",
-      invalid_json:"Fant ingen tydelig avtale i bildet. Prøv igjen, eller skriv den inn selv.",refused:"Dette bildet kan ikke leses. Skriv avtalen inn selv.",
-      session_expired:"Du må logge inn på nytt.",cancelled:""}[e&&e.code];
-    if(e&&e.code==="cancelled") return;
-    $("#sms-found").innerHTML=`<dt>Feil</dt><dd class="miss">${esc(msg||"Noe gikk galt under lesingen. Prøv igjen.")}</dd>`;
-    imgStatus(msg||"Prøv igjen.",true);
-    if(e&&["not_granted","images_unavailable","sampling_disabled","capability_disabled","capability_removed","not_declared"].includes(e.code)){ $("#img-zone").hidden=true; $("#img-or").hidden=true; }
+    const msg=(e&&e.error)||"Noe gikk galt under lesingen. Prøv igjen.";
+    $("#sms-found").innerHTML=`<dt>Feil</dt><dd class="miss">${esc(msg)}</dd>`; imgStatus(msg,true);
   }
 }
 function shrinkImage(file){
@@ -1038,10 +1124,11 @@ function shrinkImage(file){
     img.src=url;
   });
 }
+$("#sms-ai").addEventListener("click",()=>{ if(lastImage) readImageAI(lastImage); });
 $("#img-pick").addEventListener("click",()=>$("#img-file").click());
 $("#img-file").addEventListener("change",e=>{ const f=e.target.files&&e.target.files[0]; if(f) readImage(f); e.target.value=""; });
 const zone=$("#dlg-sms");
-zone.addEventListener("dragover",e=>{ if(!imgEnabled) return; e.preventDefault(); $("#img-zone").classList.add("drag"); });
+zone.addEventListener("dragover",e=>{ e.preventDefault(); $("#img-zone").classList.add("drag"); });
 zone.addEventListener("dragleave",()=>$("#img-zone").classList.remove("drag"));
 zone.addEventListener("drop",e=>{ $("#img-zone").classList.remove("drag"); const f=[...(e.dataTransfer&&e.dataTransfer.files||[])].find(x=>x.type.startsWith("image/")); if(f){ e.preventDefault(); readImage(f); } });
 zone.addEventListener("paste",e=>{ const f=pastedImage(e); if(f){ e.preventDefault(); readImage(f); } });
@@ -1049,18 +1136,46 @@ function pastedImage(e){ const items=[...((e.clipboardData&&e.clipboardData.item
 document.querySelectorAll("[data-sample]").forEach(b=>b.addEventListener("click",()=>{$("#sms-text").value=SAMPLES[+b.dataset.sample];updateSms();}));
 $("#sms-go").addEventListener("click",()=>{
   const p=S.smsDraft; dSms.close();
-  openEvent({title:p.title||"",date:p.date||iso(today()),start:p.start||"",end:p.end||"",place:p.place||"",who:p.who||[],remind:p.remind||"60",note:p.note||"",sms:p.fromImage?("Fra bilde: "+(p.summary||"skjermbilde av avtale")):p.raw.trim()},true);
+  openEvent({title:p.title||"",date:p.date||iso(today()),start:p.start||"",end:p.end||"",place:p.place||"",address:p.address||"",who:p.who||[],remind:p.remind||"60",note:p.note||"",sms:p.fromImage?("Fra bilde: "+(p.summary||"skjermbilde av avtale")):p.raw.trim()},true);
   clearImage();
 });
 
 // ---------- family dialog ----------
 const dFam=$("#dlg-family"); let famDraft=[];
-function openFam(){ famDraft=S.members.map(m=>({...m})); drawFam(); drawAcct(); $("#inv-box").hidden=true; $("#inv-share").hidden=true; dFam.showModal(); }
+function openFam(){ famDraft=S.members.map(m=>({...m})); drawFam(); drawAcct(); feedWho=[]; drawFeedWho(); loadFeeds(); $("#feed-err").hidden=true; $("#inv-box").hidden=true; $("#inv-share").hidden=true; dFam.showModal(); }
 function drawAcct(){
   const me=S.me; if(!me) return;
   $("#acct-list").innerHTML=(me.family.accounts||[]).map(a=>`<li>${esc(a.name)} · ${esc(a.email)}${a.role==="owner"?" (opprettet familien)":""}</li>`).join("");
   $("#acct-me").textContent="Innlogget som "+me.user.email;
 }
+// ---------- kalenderabonnement ----------
+let feeds=[], feedWho=[];
+function drawFeedWho(){ $("#feed-who").innerHTML=S.members.map(m=>`<button type="button" data-fw="${esc(m.id)}" aria-pressed="${feedWho.includes(m.id)}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join(""); }
+$("#feed-who").addEventListener("click",e=>{ const b=e.target.closest("[data-fw]"); if(!b) return; const id=b.dataset.fw; feedWho=feedWho.includes(id)?feedWho.filter(x=>x!==id):[...feedWho,id]; drawFeedWho(); });
+$("#feed-help-btn").addEventListener("click",()=>{ $("#feed-help").hidden=!$("#feed-help").hidden; });
+function drawFeeds(){
+  const t=d=>d?new Intl.DateTimeFormat("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(d)):"";
+  $("#feed-list").innerHTML=feeds.map(f=>`<li style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--bg);border-radius:10px;padding:8px 10px">
+    <span style="flex:1;min-width:0"><b>${esc(f.name)}</b> <small style="color:var(--muted)">${esc(f.host)}</small><br>
+    <small style="color:${f.error?"var(--danger)":"var(--muted)"}">${f.error?esc(f.error):`${f.count} avtaler · oppdatert ${esc(t(f.lastSync))}`}</small></span>
+    <button type="button" class="btn" data-fsync="${esc(f.id)}">Oppdater</button><button type="button" class="btn ghost danger" data-fdel="${esc(f.id)}">Fjern</button></li>`).join("");
+}
+async function loadFeeds(){ try{ const j=await api("/api/feeds"); feeds=j.feeds||[]; drawFeeds(); }catch{} }
+$("#feed-add").addEventListener("click",async()=>{
+  const err=$("#feed-err"); err.hidden=true; const btn=$("#feed-add");
+  const url=$("#feed-url").value.trim(); if(!url){ err.textContent="Lim inn lenken først."; err.hidden=false; return; }
+  btn.disabled=true; btn.textContent="Henter kalenderen …";
+  try{ const j=await api("/api/feeds",{method:"POST",body:{name:$("#feed-name").value.trim()||"Spond",url,who:feedWho}});
+    $("#feed-url").value=""; $("#feed-name").value=""; feedWho=[]; drawFeedWho(); toast(`Hentet ${j.count} avtaler`); await loadFeeds(); await loadEvents(); }
+  catch(e){ if(e.status!==401){ err.textContent=e.error; err.hidden=false; } }
+  finally{ btn.disabled=false; btn.textContent="Legg til abonnement"; }
+});
+$("#feed-list").addEventListener("click",async e=>{
+  const sy=e.target.closest("[data-fsync]"), de=e.target.closest("[data-fdel]");
+  if(sy){ sy.disabled=true; sy.textContent="Henter …"; try{ const j=await api(`/api/feeds/${encodeURIComponent(sy.dataset.fsync)}/sync`,{method:"POST",body:{}}); toast(`Hentet ${j.count} avtaler`); await loadEvents(); }catch(x){ if(x.status!==401) toast(x.error); } await loadFeeds(); }
+  if(de){ if(!de.dataset.armed){ de.dataset.armed="1"; de.textContent="Trykk igjen"; return; } try{ await api(`/api/feeds/${encodeURIComponent(de.dataset.fdel)}`,{method:"DELETE"}); toast("Abonnementet er fjernet"); await loadFeeds(); await loadEvents(); }catch(x){ if(x.status!==401) toast(x.error); } }
+});
+
 let invUrl="";
 $("#inv-make").addEventListener("click",async()=>{
   try{ const j=await api("/api/invites",{method:"POST",body:{}}); invUrl=j.url; $("#inv-url").value=j.url; $("#inv-box").hidden=false; $("#inv-share").hidden=!navigator.share; $("#inv-make").textContent="Lag ny lenke"; }
@@ -1106,7 +1221,7 @@ document.addEventListener("click",e=>{
 });
 document.addEventListener("paste",e=>{
   if(e.target.closest("input,textarea,dialog")||S.readOnly) return;
-  const img=pastedImage(e); if(img && imgEnabled){ e.preventDefault(); openSms(""); readImage(img); return; }
+  const img=pastedImage(e); if(img){ e.preventDefault(); openSms(""); readImage(img); return; }
   const t=(e.clipboardData||{}).getData?.("text"); if(t&&t.trim().length>8){ e.preventDefault(); openSms(t); }
 });
 // ---------- tavle ----------
