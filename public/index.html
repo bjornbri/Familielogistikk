@@ -18,7 +18,7 @@
 /* Layout: sticky header with view tabs, one content column (max 1100px); week = 7 columns on wide screens, a stacked day list on phones */
 :root{
   --bg:#F1F4F3; --surface:#FFFFFF; --ink:#16302B; --muted:#5A6E69; --line:#D5DEDB;
-  --accent:#E09A12; --accent-ink:#2A1C00; --soft:#E6ECEA; --danger:#B4332E;
+  --accent:#E09A12; --accent-ink:#2A1C00; --soft:#E6ECEA; --danger:#B4332E; --ok:#1E7A4C;
   --m1:#2F6FB0; --m2:#C2456B; --m3:#2E8A57; --m4:#C7701E; --m5:#7A5BC0; --m6:#138A9B;
   --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --f-body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -26,12 +26,12 @@
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0E1917; --surface:#152320; --ink:#E3ECE9; --muted:#93A7A2; --line:#263834;
-  --accent:#F2B744; --accent-ink:#241800; --soft:#1C2D29; --danger:#F07A72;
+  --accent:#F2B744; --accent-ink:#241800; --soft:#1C2D29; --danger:#F07A72; --ok:#5CCB8F;
   --m1:#6EA6E3; --m2:#EC7C9D; --m3:#62C08B; --m4:#EDA05A; --m5:#AC92EC; --m6:#4CC2D2;
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0E1917; --surface:#152320; --ink:#E3ECE9; --muted:#93A7A2; --line:#263834;
-  --accent:#F2B744; --accent-ink:#241800; --soft:#1C2D29; --danger:#F07A72;
+  --accent:#F2B744; --accent-ink:#241800; --soft:#1C2D29; --danger:#F07A72; --ok:#5CCB8F;
   --m1:#6EA6E3; --m2:#EC7C9D; --m3:#62C08B; --m4:#EDA05A; --m5:#AC92EC; --m6:#4CC2D2;
   color-scheme:dark}
 *{box-sizing:border-box}
@@ -230,6 +230,32 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:7
 .tmrow small{color:var(--muted)}
 .tmempty{color:var(--muted);padding:4px 2px}
 
+/* Bekreft («jeg tar den») */
+.rowc{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border-top:1px solid var(--line)}
+.rows > .rowc:first-child{border-top:0}
+.rowc > .r{border-top:0}
+.rowc > .conf{margin-right:10px}
+.rowc.past{opacity:.45}
+.rowc.past > .r{opacity:1}
+.rowc.cur{background:color-mix(in srgb,var(--accent) 14%,var(--surface));box-shadow:inset 4px 0 0 var(--accent)}
+.rowc.cur > .r{background:none;box-shadow:none}
+.conf{display:inline-flex;align-items:center;gap:5px;border:1.5px dashed var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:5px 11px;font-size:.8rem;font-weight:700;white-space:nowrap;min-height:34px}
+.conf:hover{border-color:var(--muted);color:var(--ink)}
+.conf .ck{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;border:1.5px solid currentColor;font-size:.7rem;line-height:1}
+.conf.on{border:1.5px solid var(--ok);background:color-mix(in srgb,var(--ok) 14%,var(--surface));color:var(--ok)}
+.conf.on .ck{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.conf.armed{border-color:var(--accent);color:var(--ink)}
+.cfline{display:inline-flex;align-items:center;gap:4px;color:var(--ok);font-weight:700;font-size:.78rem}
+.wev .cfline{display:block;margin-top:2px;font-size:.72rem}
+.tmrowc{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px}
+.tmrowc .conf{min-height:30px;padding:3px 10px}
+.bd-evw{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.bd-evw > .bd-ev{border:0;background:none;box-shadow:none}
+.bd-evw > .conf,.bd-evw > .cfline{align-self:flex-start;margin:0 14px 12px}
+.bd-evw.past{opacity:.4}
+.bd-evw.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
+.ev-conf{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg);border-radius:10px;padding:8px 12px;font-size:.88rem}
+
 /* Bottom bar on phones: navigation and the two add buttons within thumb reach */
 .bottombar{display:none}
 @media (max-width:640px){
@@ -427,6 +453,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
         </select></label>
       </div>
       <label class="f">Notat<textarea id="ev-note" rows="2" placeholder="Ta med gymtøy, avbestilling 24 t før …"></textarea></label>
+      <div class="ev-conf" id="ev-conf" hidden></div>
       <div id="ev-sms" hidden></div>
     </div>
     <footer>
@@ -601,6 +628,7 @@ function applyMe(me){
 async function loadEvents(){
   const [j,n]=await Promise.all([api("/api/events"),api("/api/notes").catch(()=>({notes:S.notes||[]}))]);
   S.events=j.events||[]; S.notes=n.notes||[]; S.loaded=true;
+  S.confs={}; for(const c of (j.confirmations||[])) S.confs[c.eventId+"|"+c.date]=c;
   if(statusMsg) statusMsg=""; render();
 }
 async function refresh(){
@@ -856,10 +884,52 @@ function evCard(e,d,isToday){
 function remindLabel(r){return {"15":"15 min før","60":"1 t før","180":"3 t før","evening":"kvelden før","morning":"morgenbrief"}[r]||""}
 function initials(n){ const p=String(n).trim().split(/\s+/); return (p.length>1? p[0][0]+p[p.length-1][0] : p[0].slice(0,2)).toUpperCase(); }
 function rowState(e,isToday,nm,nxt){ if(!isToday||!e.start) return ""; const st=toMin(e.start); if(endMin(e)<=nm) return "past"; if(st<=nm) return "cur"; return nxt&&nxt.id===e.id?"nxt":""; }
-function evRow(e,cls){
+// ---------- bekreftelser ----------
+function confOf(e,ds){ return (S.confs||{})[e.id+"|"+ds]||null; }
+function confName(c){
+  if(!c) return "";
+  if(S.me && c.userId===S.me.user.id) return "deg";
+  const first=String(c.name||"").split(/\s+/)[0];
+  return first||"Noen";
+}
+function confText(c){ return c?(S.me&&c.userId===S.me.user.id?"Du tar den":confName(c)+" tar den"):""; }
+function confBtn(e,ds){
+  if(S.readOnly){ const c=confOf(e,ds); return c?`<span class="cfline">✓ ${esc(confText(c))}</span>`:""; }
+  const c=confOf(e,ds), mine=c&&S.me&&c.userId===S.me.user.id;
+  const label=c?(mine?"Du tar den":confName(c)):"Bekreft";
+  const aria=c?`${confText(c)}: ${e.title}. Trykk for å ${mine?"angre":"ta over"}`:`Bekreft at du tar ${e.title}`;
+  return `<button class="conf ${c?"on":""}" data-conf="${esc(e.id)}" data-d="${ds}" aria-label="${esc(aria)}" aria-pressed="${!!c}"><span class="ck" aria-hidden="true">✓</span>${esc(label)}</button>`;
+}
+function cfLine(e,ds){ const c=confOf(e,ds); return c?`<span class="cfline">✓ ${esc(confText(c))}</span>`:""; }
+let confArmed=null, confArmT=null;
+async function toggleConf(btn){
+  const id=btn.dataset.conf, ds=btn.dataset.d, key=id+"|"+ds; const c=(S.confs||{})[key];
+  const mine=c&&S.me&&c.userId===S.me.user.id;
+  if(c && !mine && confArmed!==key){ // bekreftet av en annen: krever et ekstra trykk for å ta over
+    confArmed=key; clearTimeout(confArmT); confArmT=setTimeout(()=>{ confArmed=null; render(); },3500);
+    btn.classList.add("armed"); btn.innerHTML=`<span class="ck" aria-hidden="true">✓</span>Ta over?`; return;
+  }
+  confArmed=null; clearTimeout(confArmT);
+  S.confs=S.confs||{}; const prev=S.confs[key];
+  if(mine){
+    delete S.confs[key]; render();
+    try{ await api(`/api/confirmations?eventId=${encodeURIComponent(id)}&date=${ds}`,{method:"DELETE"}); toast("Bekreftelsen er fjernet"); }
+    catch(e){ S.confs[key]=prev; render(); if(e.status!==401) toast(e.error); }
+  } else {
+    S.confs[key]={eventId:id,date:ds,userId:S.me.user.id,name:S.me.user.name}; render();
+    try{ await api("/api/confirmations",{method:"POST",body:{eventId:id,date:ds}}); const ev=S.events.find(x=>x.id===id); toast(`Bekreftet: du tar ${ev?ev.title:"avtalen"}`); }
+    catch(e){ if(prev) S.confs[key]=prev; else delete S.confs[key]; render(); if(e.status!==401) toast(e.error); }
+  }
+  if(dEv.open && S.editing && S.editing.id===id) drawEvConf();
+}
+function evRow(e,cls,ds){
+  ds=ds||iso(S.anchor);
+  return `<div class="rowc ${cls}">${evRowInner(e,"")}${confBtn(e,ds)}</div>`;
+}
+function evRowInner(e,cls){
   const who=(e.who||[]).map(member).filter(Boolean);
   const sub=[who.map(m=>m.name).join(", ")||"Hele familien", e.place, e.sourceName].filter(Boolean).join(" · ");
-  return `<button class="r ${cls}" data-ev="${esc(e.id)}"><span class="rt">${e.start?esc(e.start):"Hele<br>dagen"}${e.end?`<small>–${esc(e.end)}</small>`:""}</span>
+  return `<button class="r" data-ev="${esc(e.id)}"><span class="rt">${e.start?esc(e.start):"Hele<br>dagen"}${e.end?`<small>–${esc(e.end)}</small>`:""}</span>
     <span class="rb"><b>${esc(e.title)}</b><span>${esc(sub)}</span></span>
     <span class="rw">${who.slice(0,3).map(m=>`<i style="--pc:var(--m${m.c})" title="${esc(m.name)}">${esc(initials(m.name))}</i>`).join("")}${who.length>3?`<i style="--pc:var(--muted)">+${who.length-3}</i>`:""}</span></button>`;
 }
@@ -874,7 +944,8 @@ function msgsBlock(d){
 function tomorrowList(d){
   const tl=eventsOn(addDays(d,1));
   if(!tl.length) return `<div class="tmempty">Ingenting planlagt</div>`;
-  return `<div class="tmlist">${tl.map(e=>`<button class="tmrow" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}"><span class="t">${esc(e.start||"Hele dagen")}</span><i></i><span>${esc(e.title)}${whoNames(e)?` <small>· ${esc(whoNames(e))}</small>`:""}</span></button>`).join("")}</div>`;
+  const ds=iso(addDays(d,1));
+  return `<div class="tmlist">${tl.map(e=>`<div class="tmrowc"><button class="tmrow" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}"><span class="t">${esc(e.start||"Hele dagen")}</span><i></i><span>${esc(e.title)}${whoNames(e)?` <small>· ${esc(whoNames(e))}</small>`:""}</span></button>${confBtn(e,ds)}</div>`).join("")}</div>`;
 }
 function renderDay(){
   const d=S.anchor, list=eventsOn(d), isToday=iso(d)===iso(today());
@@ -886,7 +957,7 @@ function renderDay(){
   if(!isToday) h+=`<button class="back" data-act="today">← Tilbake til i dag</button>`;
   h+=msgsBlock(d);
   const shown=S.showPast?list:rest;
-  if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,null))).join("")}</div>`;
+  if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,null),iso(d))).join("")}</div>`;
   else h+=`<div class="td-done">${list.length?"Ingen flere avtaler i dag.":(isToday?"Ingen avtaler i dag.":"Ingen avtaler denne dagen.")}</div>`;
   if(past.length) h+=`<button class="fold" data-act="past">${S.showPast?"Skjul ferdige":`✓ ${past.length} ${past.length===1?"ferdig avtale":"ferdige avtaler"} i dag · vis`}</button>`;
   h+=`<h2 class="sec-h">${isToday?"I morgen":cap(fDayLong.format(addDays(d,1)))}</h2>${tomorrowList(d)}`;
@@ -902,7 +973,7 @@ function renderWeek(){
   const s=startOfWeek(S.anchor), t=iso(today()); let any=false;
   const cols=[...Array(7)].map((_,i)=>{const d=addDays(s,i); const l=eventsOn(d); if(l.length) any=true;
     return `<section class="day ${iso(d)===t?"today":""}"><h3 data-goday="${iso(d)}"><span>${DOW[i]}</span><b>${d.getDate()}</b></h3>
-    ${l.length?l.map(e=>`<button class="wev" data-ev="${esc(e.id)}" style="--evc:${colorOf(e)}"><span class="t">${esc(e.start||"hele dagen")}${e.end?"–"+esc(e.end):""}</span><b>${esc(e.title)}</b></button>`).join(""):`<span class="none">Fri</span>`}</section>`}).join("");
+    ${l.length?l.map(e=>`<button class="wev" data-ev="${esc(e.id)}" style="--evc:${colorOf(e)}"><span class="t">${esc(e.start||"hele dagen")}${e.end?"–"+esc(e.end):""}</span><b>${esc(e.title)}</b>${cfLine(e,iso(d))}</button>`).join(""):`<span class="none">Fri</span>`}</section>`}).join("");
   return `<div class="week">${cols}</div>${!any?`<div style="margin-top:12px">${emptyBlock()}</div>`:exampleBar()}`;
 }
 function renderMonth(){
@@ -911,7 +982,7 @@ function renderMonth(){
   for(let i=0;i<42;i++){const d=addDays(s,i); if(i>=35 && d.getMonth()!==a.getMonth()) break;
     const l=eventsOn(d); const other=d.getMonth()!==a.getMonth();
     cells+=`<button class="cell ${other?"other":""} ${iso(d)===t?"today":""}" data-goday="${iso(d)}"><span class="n">${d.getDate()}${(i%7===0)?`<small>u${isoWeek(d)}</small>`:""}</span>
-      ${l.slice(0,3).map(e=>`<span class="l" style="--evc:${colorOf(e)}">${esc(e.start?e.start+" ":"")}${esc(e.title)}</span>`).join("")}
+      ${l.slice(0,3).map(e=>`<span class="l" style="--evc:${colorOf(e)}">${confOf(e,iso(d))?"✓ ":""}${esc(e.start?e.start+" ":"")}${esc(e.title)}</span>`).join("")}
       ${l.length>3?`<span class="more">+${l.length-3} til</span>`:""}
       <span class="dots">${l.map(e=>`<i style="--evc:${colorOf(e)}"></i>`).join("")}</span></button>`;}
   return `<div class="monthwrap"><div class="month">${cells}</div></div>${S.events.length?exampleBar():`<div style="margin-top:12px">${emptyBlock()}</div>`}`;
@@ -926,7 +997,7 @@ function openEvent(e, fromSms){
   $("#ev-h").textContent = S.events.some(z=>z.id===x.id) ? "Endre avtale" : (fromSms?(String(x.sms||"").startsWith("Fra bilde")?"Avtale fra bilde":"Avtale fra SMS"):"Ny avtale");
   $("#ev-title").value=x.title||""; $("#ev-date").value=x.date||""; $("#ev-start").value=x.start||""; $("#ev-end").value=x.end||"";
   $("#ev-place").value=x.place||""; closePlaces(); placeErr(""); placeSession=""; drawPlaceMeta(); $("#ev-note").value=x.note||""; $("#ev-remind").value=x.remind||""; $("#ev-repeat").value=x.repeat||"";
-  drawWho();
+  drawWho(); drawEvConf();
   const smsEl=$("#ev-sms"); if(x.sms){smsEl.hidden=false;smsEl.innerHTML=`<div class="f" style="font-size:.8rem;font-weight:700;color:var(--muted)">Original melding</div><div class="origsms">${esc(x.sms)}</div>`} else smsEl.hidden=true;
   const del=$("#ev-del"); del.hidden=!S.events.some(z=>z.id===x.id) || S.readOnly; del.textContent="Slett"; del.dataset.armed="";
   const fromFeed=String(x.id).startsWith("f_");
@@ -934,6 +1005,13 @@ function openEvent(e, fromSms){
   if(fromFeed){ $("#ev-h").textContent="Fra "+(x.sourceName||"kalenderabonnement"); $("#ev-del").hidden=true;
     const smsEl=$("#ev-sms"); smsEl.hidden=false; smsEl.innerHTML=`<div class="origsms">Denne avtalen hentes automatisk fra «${esc(x.sourceName||"abonnement")}». Endringer gjøres i kilden, for eksempel i Spond.</div>`; }
   dEv.showModal(); setTimeout(()=>$("#ev-title").focus(),30);
+}
+function drawEvConf(){
+  const x=S.editing, el=$("#ev-conf"); const exists=x&&S.events.some(z=>z.id===x.id);
+  if(!exists){ el.hidden=true; return; }
+  const ds=S.editDate||(x.repeat?iso(S.anchor):x.date)||iso(S.anchor); const c=confOf(x,ds);
+  el.hidden=false;
+  el.innerHTML=`<span style="flex:1;min-width:0">${c?`<b style="color:var(--ok)">✓ ${esc(confText(c))}</b>`:"Ingen har bekreftet ennå"} <small style="color:var(--muted)">· ${esc(cap(fDayLong.format(parseISO(ds))))}</small></span>${confBtn(x,ds)}`;
 }
 function drawWho(){
   $("#ev-who").innerHTML=S.members.map(m=>`<button type="button" data-who="${esc(m.id)}" aria-pressed="${S.editing.who.includes(m.id)}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
@@ -1211,8 +1289,9 @@ function step(n){ const a=S.anchor; if(S.view==="day") S.anchor=addDays(a,n); el
 $("#open-new").addEventListener("click",()=>openEvent(null));
 $("#open-sms").addEventListener("click",()=>openSms(""));
 document.addEventListener("click",e=>{
+  const cf=e.target.closest("[data-conf]"); if(cf){ e.preventDefault(); toggleConf(cf); return; }
   const nt=e.target.closest("[data-note]"); if(nt){ const n=(S.notes||[]).find(z=>z.id===nt.dataset.note); if(n) openNote(n); return; }
-  const ev=e.target.closest("[data-ev]"); if(ev){ const x=S.events.find(z=>z.id===ev.dataset.ev); if(x) openEvent(x); return; }
+  const ev=e.target.closest("[data-ev]"); if(ev){ const ctx=ev.closest(".rowc,.bd-evw,.tmrowc"); S.editDate=(ctx&&ctx.querySelector("[data-conf]")&&ctx.querySelector("[data-conf]").dataset.d)||(ev.closest(".day")&&ev.closest(".day").querySelector("[data-goday]")&&ev.closest(".day").querySelector("[data-goday]").dataset.goday)||null; const x=S.events.find(z=>z.id===ev.dataset.ev); if(x) openEvent(x); return; }
   const g=e.target.closest("[data-goday]"); if(g && !e.target.closest("dialog")){ S.anchor=parseISO(g.dataset.goday); S.view="day"; render(); window.scrollTo({top:0}); return; }
   const mem=e.target.closest("[data-mem]"); if(mem){ const id=mem.dataset.mem; S.hidden.has(id)?S.hidden.delete(id):S.hidden.add(id); render(); return; }
   if(e.target.closest("#edit-fam")){ openFam(); return; }
@@ -1239,9 +1318,9 @@ function renderBoard(){
   const fell=list.filter(shared);
   if(fell.length) cols.push({name:"Hele familien",pc:"var(--ink)",items:fell});
   for(const m of S.members){ if(S.hidden.has(m.id)) continue; cols.push({name:m.name,pc:`var(--m${m.c})`,items:list.filter(e=>!shared(e)&&(e.who||[]).includes(m.id))}); }
-  const card=e=>`<button class="bd-ev ${state(e)}" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}">
+  const card=e=>`<div class="bd-evw ${state(e)}"><button class="bd-ev" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}">
       <span class="t">${e.start?esc(e.start):"Hele dagen"}${e.end?`<small>–${esc(e.end)}</small>`:""}</span>
-      <span class="x">${esc(e.title)}</span>${e.place?`<span class="p">${esc(e.place)}</span>`:""}${e.note?`<span class="p">${esc(e.note)}</span>`:""}</button>`;
+      <span class="x">${esc(e.title)}</span>${e.place?`<span class="p">${esc(e.place)}</span>`:""}${e.note?`<span class="p">${esc(e.note)}</span>`:""}</button>${confBtn(e,iso(d))}</div>`;
   const fs=!!(document.fullscreenElement||document.webkitFullscreenElement);
   const ns=notesOn(d);
   el.innerHTML = !S.loaded ? `<div class="empty"><b>Henter familiens kalender …</b></div>` : `
@@ -1252,7 +1331,7 @@ function renderBoard(){
     </div>
     ${statusMsg?`<div class="status">${esc(statusMsg)}</div>`:""}
     ${ns.length?`<div class="bd-msgs">${ns.map(noteHtml).join("")}</div>`:""}
-    ${window.innerWidth<700 ? `<div class="bd-list">${list.length?`<div class="rows">${list.map(e=>evRow(e,rowState(e,true,nm,null))).join("")}</div>`:`<div class="bd-free">Ingen avtaler i dag</div>`}</div>` :
+    ${window.innerWidth<700 ? `<div class="bd-list">${list.length?`<div class="rows">${list.map(e=>evRow(e,rowState(e,true,nm,null),iso(d))).join("")}</div>`:`<div class="bd-free">Ingen avtaler i dag</div>`}</div>` :
     `<div class="bd-cols" style="--cols:${Math.min(Math.max(cols.length,1),6)}">${cols.map(c=>`<section class="bd-col" style="--pc:${c.pc}"><h2>${esc(c.name)}<small>${c.items.length||""}</small></h2>${c.items.length?c.items.map(card).join(""):`<div class="bd-free">Fri i dag</div>`}</section>`).join("")}</div>`}
     <section class="bd-tmsec"><h2>I morgen</h2>${tomorrowList(d)}</section>`;
 }

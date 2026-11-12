@@ -77,6 +77,14 @@ async function migrate() {
       event_count int not null default 0,
       created_at timestamptz not null default now()
     );
+    create table if not exists confirmations (
+      family_id uuid not null references families(id) on delete cascade,
+      event_id text not null,
+      date text not null,
+      user_id uuid not null references users(id) on delete cascade,
+      created_at timestamptz not null default now(),
+      primary key (family_id, event_id, date)
+    );
     create table if not exists notes (
       id text not null,
       family_id uuid not null references families(id) on delete cascade,
@@ -179,9 +187,9 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 
 async function familyPayload(user) {
   const f = await pool.query(`select id, name, members from families where id = $1`, [user.family_id]);
-  const people = await pool.query(`select name, email, role from users where family_id = $1 order by created_at`, [user.family_id]);
+  const people = await pool.query(`select id, name, email, role from users where family_id = $1 order by created_at`, [user.family_id]);
   return {
-    user: { name: user.name, email: user.email, role: user.role },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role },
     family: { name: f.rows[0].name, members: f.rows[0].members, accounts: people.rows },
     imageReading: !!ANTHROPIC_API_KEY,
     placesSearch: !!GOOGLE_MAPS_API_KEY,
@@ -358,7 +366,34 @@ app.delete("/api/notes/:id", wrap(auth), wrap(async (req, res) => {
 
 app.get("/api/events", wrap(auth), wrap(async (req, res) => {
   const { rows } = await pool.query(`select id, data from events where family_id = $1`, [req.user.family_id]);
-  res.json({ events: rows.map((r) => ({ id: r.id, ...r.data })) });
+  const c = await pool.query(
+    `select c.event_id, c.date, c.user_id, u.name, c.created_at from confirmations c join users u on u.id = c.user_id
+      where c.family_id = $1 and c.date >= to_char(now() - interval '14 days', 'YYYY-MM-DD')`,
+    [req.user.family_id]
+  );
+  res.json({
+    events: rows.map((r) => ({ id: r.id, ...r.data })),
+    confirmations: c.rows.map((r) => ({ eventId: r.event_id, date: r.date, userId: r.user_id, name: r.name, at: r.created_at })),
+  });
+}));
+
+// Bekreftelse: «jeg tar den» for én avtale på én dag (virker også for gjentakelser og abonnement)
+app.post("/api/confirmations", wrap(auth), wrap(async (req, res) => {
+  const eventId = clean(req.body.eventId, 60), date = clean(req.body.date, 10);
+  if (!eventId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "Ugyldig avtale." });
+  const ev = await pool.query(`select 1 from events where family_id = $1 and id = $2`, [req.user.family_id, eventId]);
+  if (!ev.rows[0]) return res.status(404).json({ error: "Fant ikke avtalen." });
+  await pool.query(
+    `insert into confirmations (family_id, event_id, date, user_id) values ($1, $2, $3, $4)
+     on conflict (family_id, event_id, date) do update set user_id = excluded.user_id, created_at = now()`,
+    [req.user.family_id, eventId, date, req.user.id]
+  );
+  res.json({ ok: true, confirmation: { eventId, date, userId: req.user.id, name: req.user.name, at: new Date().toISOString() } });
+}));
+app.delete("/api/confirmations", wrap(auth), wrap(async (req, res) => {
+  const eventId = clean(String(req.query.eventId || ""), 60), date = clean(String(req.query.date || ""), 10);
+  await pool.query(`delete from confirmations where family_id = $1 and event_id = $2 and date = $3`, [req.user.family_id, eventId, date]);
+  res.json({ ok: true });
 }));
 
 app.put("/api/events/:id", wrap(auth), wrap(async (req, res) => {
@@ -637,7 +672,7 @@ app.use((err, req, res, next) => {
 
 // Expired sessions/invites are cleaned up hourly
 setInterval(() => {
-  pool.query(`delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD')`).catch(() => {});
+  pool.query(`delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD')`).catch(() => {});
 }, 3600e3);
 
 migrate()
