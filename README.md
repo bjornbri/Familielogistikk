@@ -15,6 +15,15 @@ Har uke- og månedsvisning, en fullskjermtavle for nettbrett/vegg, og avtaler ka
 - **Stedssøk:** skriv «holmen svømme» i Sted-feltet og velg fra forslagene. Avtalen får adresse og lenke til Google Maps. Krever `GOOGLE_MAPS_API_KEY` (valgfritt). Uten nøkkel får alle steder likevel en «Åpne i Google Maps»-lenke basert på teksten.
 - Kan legges til på Hjem-skjermen på iPhone/Android og åpnes som en app (web-manifest).
 
+## Ukesoppgaver
+
+- **Faste oppgaver** per barn og **oppgavebørs** med «først til mølla» (maks 2 reservert samtidig, 24 timers frist, kan endres).
+- Barnet krysser av med **bilde**. En forelder **godkjenner** eller avviser. Bilder slettes automatisk etter 30 dager.
+- **Ukelønn** per barn: hele beløpet når alle faste er godkjent, eller en andel per oppgave. Pluss betaling per oppgave.
+- **Ukeoppgjør:** foreldre markerer beløpet som utbetalt. Appen flytter ikke penger.
+- **Barnekontoer:** «Familie → Inviter barn». Barn kan ikke endre oppgaver, lønn eller familien.
+- Tavla viser fremdrift per barn og ledige oppgaver i børsen.
+
 ## Kjør på Render
 
 1. I Render: **New + → Blueprint**, velg dette repoet. `render.yaml` lager en webtjeneste og en Postgres-database i Frankfurt.

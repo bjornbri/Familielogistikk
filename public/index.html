@@ -256,6 +256,67 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:7
 .bd-evw.cur{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
 .ev-conf{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg);border-radius:10px;padding:8px 12px;font-size:.88rem}
 
+/* Ukesoppgaver: godkjenning øverst for foreldre, ett kort per barn, børsen under */
+.ch{display:flex;flex-direction:column;gap:16px;max-width:760px}
+.ch-sec{display:flex;flex-direction:column;gap:8px}
+.ch-sec > h2{margin:0;font-family:var(--f-display);font-size:1.2rem;display:flex;align-items:baseline;gap:8px}
+.ch-sec > h2 small{font-family:var(--f-body);font-weight:400;font-size:.85rem;color:var(--muted)}
+.kid{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.kid-h{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center;padding:12px 14px 10px;border-bottom:1px solid var(--line)}
+.kid-h b{font-family:var(--f-display);font-size:1.15rem;display:flex;align-items:center;gap:8px}
+.kid-h b i{width:12px;height:12px;border-radius:50%;background:var(--pc)}
+.kid-h .sum{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-weight:700;text-align:right}
+.kid-h .sum small{display:block;font-family:var(--f-body);font-weight:400;font-size:.78rem;color:var(--muted)}
+.prog{display:block;height:8px;border-radius:99px;background:var(--soft);overflow:hidden;grid-column:1/-1}
+.prog > span{display:block;height:100%;background:var(--ok);border-radius:99px}
+.prog.small{height:6px}
+.crow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.crow:first-of-type{border-top:0}
+.crow .ct{min-width:0;border:0;background:none;text-align:left;padding:0}
+.crow .ct b{display:block;font-size:1rem;line-height:1.25;overflow-wrap:break-word}
+.crow .ct > span{display:block;font-size:.8rem;color:var(--muted)}
+.crow .ct .amt{font-family:var(--f-mono)}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:5px 11px;font-size:.8rem;font-weight:700;white-space:nowrap;border:1.5px solid transparent;min-height:34px}
+.pill.wait{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border-color:color-mix(in srgb,var(--accent) 60%,var(--line));color:var(--ink)}
+.pill.ok{background:color-mix(in srgb,var(--ok) 14%,var(--surface));border-color:var(--ok);color:var(--ok)}
+.pill.no{background:color-mix(in srgb,var(--danger) 10%,var(--surface));border-color:var(--danger);color:var(--danger)}
+.act{border:1.5px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:999px;padding:5px 13px;font-size:.82rem;font-weight:700;white-space:nowrap;min-height:34px}
+.act.light{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.act.take{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.cbtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.kid-f{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--bg);border-top:1px solid var(--line);font-size:.86rem;color:var(--muted)}
+.review{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:center;background:var(--surface);border:1.5px solid color-mix(in srgb,var(--accent) 60%,var(--line));border-radius:14px;padding:10px}
+.review .ph{width:72px;height:72px;border-radius:10px;background:var(--soft) center/cover no-repeat;border:0;padding:0;display:grid;place-items:center;font-size:.7rem;color:var(--muted)}
+.review .rb2{min-width:0;display:flex;flex-direction:column;gap:6px}
+.review .rb2 b{font-size:1rem}
+.review .rb2 span{font-size:.82rem;color:var(--muted)}
+.pool{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.ch-empty{border:1px dashed var(--line);border-radius:14px;padding:20px;color:var(--muted);display:flex;flex-direction:column;gap:10px}
+.ch-empty b{color:var(--ink);font-family:var(--f-display);font-size:1.1rem}
+details.ch-set{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+details.ch-set summary{cursor:pointer;font-weight:700}
+.ch-set .grid{display:grid;grid-template-columns:minmax(0,1fr) 110px 150px;gap:8px;align-items:center;margin-top:10px;font-size:.9rem}
+.ch-set input,.ch-set select{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:7px 9px;width:100%;min-width:0;color:var(--ink)}
+@media (max-width:520px){.ch-set .grid{grid-template-columns:minmax(0,1fr) 90px}.ch-set .grid .mode{grid-column:1/-1}}
+.mytasks{display:flex;flex-direction:column;gap:6px}
+.mytasks .crow{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.banner{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1.5px solid color-mix(in srgb,var(--accent) 60%,var(--line));background:color-mix(in srgb,var(--accent) 12%,var(--surface));border-radius:12px;padding:10px 14px;font-weight:700;text-align:left;width:100%}
+.photo-prev{max-height:260px;border-radius:10px;align-self:flex-start;border:1px solid var(--line)}
+#ph-big{max-width:100%;max-height:70vh;border-radius:10px;display:block;margin:0 auto}
+.sheet{display:flex;flex-direction:column;gap:8px}
+.sheet button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px 14px;font-weight:700;font-size:1rem}
+.sheet button span{font-weight:400;font-size:.85rem;color:var(--muted)}
+.chip.kidflag{cursor:pointer;font-size:.78rem;padding:3px 10px}
+/* Tavle: ukens oppgaver */
+.bd-chores{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.bd-kid{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
+.bd-kid .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:clamp(1rem,1.6vw,1.25rem)}
+.bd-kid .top b{display:flex;align-items:center;gap:8px}
+.bd-kid .top b i{width:12px;height:12px;border-radius:50%;background:var(--pc)}
+.bd-kid .top span{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.bd-pool{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bd-pool > b{font-family:var(--f-display);margin-right:4px}
+
 /* Bottom bar on phones: navigation and the two add buttons within thumb reach */
 .bottombar{display:none}
 @media (max-width:640px){
@@ -279,7 +340,7 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:7
   .bottombar .add{color:var(--surface)}
   .bottombar .add span.ic{background:var(--ink);border-radius:12px;width:40px;height:30px;display:grid;place-items:center}
 }
-body.v-day .members,body.v-day .note{display:none}
+body.v-day .members,body.v-day .note,body.v-chores .members,body.v-chores .note{display:none}
 
 /* Tavle: «I dag» stort øverst, beskjeder, kolonner per person, «I morgen» som egen seksjon */
 .bd-head{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
@@ -401,6 +462,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
       <button id="tab-day" data-view="day" aria-pressed="true">I dag</button>
       <button id="tab-week" data-view="week" aria-pressed="false">Uke</button>
       <button id="tab-month" data-view="month" aria-pressed="false">Måned</button>
+      <button id="tab-chores" data-view="chores" aria-pressed="false">Oppgaver</button>
     </div>
     <div class="actions">
       <button class="btn" id="open-board">Tavle</button>
@@ -508,6 +570,74 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
   </form>
 </dialog>
 
+<dialog id="dlg-new">
+  <div class="dlg">
+    <header><h2>Legg til</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body sheet">
+      <button type="button" data-new="event">Avtale<span>Trening, legetime, bursdag …</span></button>
+      <button type="button" data-new="sms">Fra SMS eller bilde<span>Lim inn en melding eller velg et skjermbilde</span></button>
+      <button type="button" data-new="note">Beskjed<span>Vises på tavla for én dag</span></button>
+      <button type="button" data-new="chore" id="new-chore">Oppgave<span>Fast oppgave for et barn, eller ekstraoppgave i børsen</span></button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlg-chore">
+  <form class="dlg" id="choreform" method="dialog">
+    <header><h2 id="chore-h">Ny oppgave</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body">
+      <label class="f">Oppgave<input id="chore-title" required maxlength="80" placeholder="F.eks. Rydde rommet, Vaske bilen"></label>
+      <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--muted)">Type<div class="pick" id="chore-kind">
+        <button type="button" data-kind="fixed" aria-pressed="true">Fast oppgave</button><button type="button" data-kind="pool" aria-pressed="false">Oppgavebørs (først til mølla)</button></div></div>
+      <div class="f" id="chore-who-row" style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--muted)">Hvem<div class="pick" id="chore-who"></div></div>
+      <div class="row2">
+        <label class="f">Betaling (kr)<input id="chore-amount" type="number" min="0" max="10000" step="5" inputmode="numeric" placeholder="0"></label>
+        <label class="f">Gjentas<select id="chore-repeat"><option value="weekly">Hver uke</option><option value="once">Bare denne uken</option></select></label>
+      </div>
+      <label class="f" style="flex-direction:row;align-items:center;gap:8px;font-size:.92rem;color:var(--ink);font-weight:400"><input id="chore-photo" type="checkbox" checked style="width:auto"> Krever bilde som bevis</label>
+      <p id="chore-hint" style="margin:0;font-size:.85rem;color:var(--muted)"></p>
+    </div>
+    <footer>
+      <button type="button" class="btn danger left" id="chore-del" hidden>Slett</button>
+      <button type="button" class="btn" data-close>Avbryt</button>
+      <button type="submit" class="btn primary">Lagre</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="dlg-done">
+  <form class="dlg" id="doneform" method="dialog">
+    <header><h2 id="done-h">Ferdig!</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body">
+      <p id="done-info" style="margin:0;color:var(--muted)"></p>
+      <div class="f" id="done-who-row" hidden style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--muted)">Hvem gjorde den?<div class="pick" id="done-who"></div></div>
+      <input type="file" id="done-file" accept="image/*" capture="environment" hidden>
+      <button type="button" class="btn sms" id="done-pick">Ta bilde</button>
+      <img id="done-prev" class="photo-prev" alt="Bilde av utført oppgave" hidden>
+      <p class="auth-err" id="done-err" hidden></p>
+    </div>
+    <footer>
+      <button type="button" class="btn" data-close>Avbryt</button>
+      <button type="submit" class="btn primary" id="done-go">Send til godkjenning</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="dlg-pickkid">
+  <div class="dlg">
+    <header><h2 id="pk-h">Hvem tar den?</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body"><div class="pick" id="pk-list" style="gap:10px"></div></div>
+  </div>
+</dialog>
+
+<dialog id="dlg-photo">
+  <div class="dlg">
+    <header><h2 id="ph-h">Bilde</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body"><img id="ph-big" alt="Bilde av utført oppgave"></div>
+    <footer id="ph-foot"></footer>
+  </div>
+</dialog>
+
 <dialog id="dlg-family">
   <div class="dlg">
     <header><h2>Familie og konto</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
@@ -532,7 +662,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
         <h3>Inviter familiemedlem</h3>
         <p style="margin:0;font-size:.88rem;color:var(--muted)">Lag en lenke og send den på SMS. Lenken virker én gang og gjelder i 7 dager.</p>
         <div class="linkbox" id="inv-box" hidden><input id="inv-url" readonly aria-label="Invitasjonslenke"><button type="button" class="btn" id="inv-copy">Kopier</button></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sms" id="inv-make">Lag invitasjonslenke</button><button type="button" class="btn" id="inv-share" hidden>Del …</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sms" id="inv-make">Inviter forelder</button><button type="button" class="btn sms" id="inv-make-kid">Inviter barn</button><button type="button" class="btn" id="inv-share" hidden>Del …</button></div>
       </div>
       <div class="acct">
         <h3>Kontoer i familien</h3>
@@ -551,7 +681,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
   <button data-view="day" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>I dag</button>
   <button data-view="week" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Uke</button>
   <button data-view="month" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/></svg>Måned</button>
-  <button id="bb-sms"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/></svg>SMS / bilde</button>
+  <button data-view="chores" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M8 10l2 2 4-4M8 16h8"/></svg>Oppgaver</button>
   <button id="bb-new" class="add"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span style="color:var(--ink)">Ny</span></button>
 </nav>
 <section id="board" lang="nb" hidden aria-label="Tavle"></section>
@@ -633,11 +763,11 @@ async function loadEvents(){
 }
 async function refresh(){
   if(document.visibilityState!=="visible"||document.querySelector("dialog[open]")||!S.me) return;
-  try{ const me=await api("/api/me"); applyMe(me); await loadEvents(); }catch(e){ if(e.status===0) setStatus("Ingen nettverksforbindelse. Det du ser kan være utdatert."); }
+  try{ const me=await api("/api/me"); applyMe(me); await loadEvents(); await loadChores(true); }catch(e){ if(e.status===0) setStatus("Ingen nettverksforbindelse. Det du ser kan være utdatert."); }
 }
 async function init(){
   S.mode="api"; render();
-  try{ const me=await api("/api/me",{noAuthRedirect:true}); applyMe(me); hideAuth(); await loadEvents(); startPolling(); }
+  try{ const me=await api("/api/me",{noAuthRedirect:true}); applyMe(me); hideAuth(); await loadEvents(); loadChores(true); startPolling(); }
   catch(e){ if(e.status===401) showAuth(); else { S.loaded=true; setStatus(e.error||"Får ikke kontakt med serveren."); } }
 }
 function startPolling(){ clearInterval(pollT); pollT=setInterval(refresh,30000); }
@@ -681,7 +811,7 @@ async function showAuth(){
   document.querySelectorAll("dialog[open]").forEach(d=>d.close());
   if(inviteToken){
     try{ const j=await api("/api/invites/"+encodeURIComponent(inviteToken),{noAuthRedirect:true});
-      $("#invite-note").innerHTML=`<b>${esc(j.inviter||"Noen")}</b> har invitert deg til <b>${esc(j.family)}</b>. Opprett en konto for å bli med, eller logg inn hvis du allerede har en.`; }
+      $("#invite-note").innerHTML=`<b>${esc(j.inviter||"Noen")}</b> har invitert deg${j.kind==="child"?" som barn":""} til <b>${esc(j.family)}</b>. Opprett en konto for å bli med, eller logg inn hvis du allerede har en.`; }
     catch(e){ $("#invite-note").textContent="Invitasjonslenken er brukt eller utløpt. Be om en ny, eller opprett din egen familie."; }
     $("#invite-note").hidden=false;
   }
@@ -838,7 +968,7 @@ function render(){
   document.body.classList.toggle("board",S.board); $("#board").hidden=!S.board;
   if(S.board){ renderBoard(); return; }
   document.querySelectorAll(".tabs button,.bottombar [data-view]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.view===S.view)));
-  ["day","week","month"].forEach(v=>document.body.classList.toggle("v-"+v,S.view===v));
+  ["day","week","month","chores"].forEach(v=>document.body.classList.toggle("v-"+v,S.view===v));
   renderMembers(); renderHeading();
   const main=$("#main"); let html="";
   if(statusMsg) html+=`<div class="status">${esc(statusMsg)}</div>`;
@@ -846,9 +976,11 @@ function render(){
   if(!S.loaded) html+=`<div class="empty"><b>Henter familiens kalender …</b>Avtalene dukker opp her straks.</div>`;
   else if(S.view==="day") html+=renderDay();
   else if(S.view==="week") html+=renderWeek();
+  else if(S.view==="chores") html+=renderChores();
   else html+=renderMonth();
   main.innerHTML=html;
-  $("#open-new").disabled=$("#open-sms").disabled=$("#bb-new").disabled=$("#bb-sms").disabled=S.readOnly;
+  $("#open-new").disabled=$("#open-sms").disabled=$("#bb-new").disabled=S.readOnly;
+  if(S.view==="chores"||S.view==="day"||S.board){ const wk=S.view==="chores"?weekKey(S.anchor):weekKey(today()); if(!S.ch||S.ch.week!==wk) loadChores(); }
   $("#note").textContent = "Testversjon: alle i familien ser samme kalender. Varsel-innstillingen lagres på hver avtale, men selve push-varslene kommer i en senere versjon.";
 }
 function renderMembers(){
@@ -860,6 +992,7 @@ function renderHeading(){
   const a=S.anchor; let eye="", h="";
   if(S.view==="day"){ const diff=Math.round((a-today())/864e5); eye=diff===0?"I dag · uke "+isoWeek(a)+" · kl "+pad(new Date().getHours())+":"+pad(new Date().getMinutes()):diff===1?"I morgen · uke "+isoWeek(a):diff===-1?"I går · uke "+isoWeek(a):"Uke "+isoWeek(a); h=cap(fDayLong.format(a)); }
   else if(S.view==="week"){ const s=startOfWeek(a),e=addDays(s,6); eye="Uke "+isoWeek(s); h=`${s.getDate()}.${s.getMonth()!==e.getMonth()?" "+fmt({month:"short"}).format(s):""} – ${e.getDate()}. ${fmt({month:"long"}).format(e)}`; }
+  else if(S.view==="chores"){ const s0=startOfWeek(a),e0=addDays(s0,6); eye=`Ukesoppgaver · ${s0.getDate()}.–${e0.getDate()}. ${fmt({month:"short"}).format(e0)}`; h=(weekKey(a)===weekKey(today())?"Denne uken":"Uke "+isoWeek(a)); }
   else { eye=String(a.getFullYear()); h=cap(fmt({month:"long"}).format(a)); }
   const isT=S.view==="day" && iso(a)===iso(today());
   if(isT){ eye=cap(fDayLong.format(a))+" · uke "+isoWeek(a); h="I dag"; }
@@ -950,12 +1083,13 @@ function tomorrowList(d){
 function renderDay(){
   const d=S.anchor, list=eventsOn(d), isToday=iso(d)===iso(today());
   const now=new Date(), nm=now.getHours()*60+now.getMinutes();
-  if(!list.length && !S.events.length) return emptyBlock();
+  if(!list.length && !S.events.length) return `<div class="td">${msgsBlock(d)}${isToday?choresToday():""}${emptyBlock()}</div>`;
   const past=isToday?list.filter(e=>e.start&&endMin(e)<=nm):[];
   const rest=list.filter(e=>!past.includes(e));
   let h=`<div class="td">`;
   if(!isToday) h+=`<button class="back" data-act="today">← Tilbake til i dag</button>`;
   h+=msgsBlock(d);
+  if(isToday) h+=choresToday();
   const shown=S.showPast?list:rest;
   if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,null),iso(d))).join("")}</div>`;
   else h+=`<div class="td-done">${list.length?"Ingen flere avtaler i dag.":(isToday?"Ingen avtaler i dag.":"Ingen avtaler denne dagen.")}</div>`;
@@ -1016,6 +1150,267 @@ function drawEvConf(){
 function drawWho(){
   $("#ev-who").innerHTML=S.members.map(m=>`<button type="button" data-who="${esc(m.id)}" aria-pressed="${S.editing.who.includes(m.id)}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
 }
+// ---------- ukesoppgaver ----------
+function weekKey(d){ const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); const day=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-day); const y0=new Date(Date.UTC(t.getUTCFullYear(),0,1)); return t.getUTCFullYear()+"-W"+String(Math.ceil(((t-y0)/864e5+1)/7)).padStart(2,"0"); }
+const isParent=()=>!S.me||S.me.user.kind!=="child";
+const myMid=()=>S.me&&S.me.user.memberId;
+let chLoading=null;
+async function loadChores(quiet){
+  const wk=S.view==="chores"?weekKey(S.anchor):weekKey(today());
+  if(chLoading===wk) return; chLoading=wk;
+  try{ const j=await api("/api/chores?week="+wk); S.ch=j; if(!quiet||S.view==="chores"||S.view==="day"||S.board) render(); }
+  catch(e){ if(e.status!==401&&S.view==="chores") toast(e.error); }
+  finally{ if(chLoading===wk) chLoading=null; }
+}
+function kids(){
+  const ch=S.ch; const ids=new Set(S.members.filter(m=>m.kid).map(m=>m.id));
+  if(ch){ ch.chores.forEach(c=>{ if(c.kind==="fixed"&&c.assignee) ids.add(c.assignee); }); ch.runs.forEach(r=>ids.add(r.memberId)); Object.keys(ch.settings.allowance||{}).forEach(k=>ids.add(k)); }
+  return S.members.filter(m=>ids.has(m.id));
+}
+const runOf=c=>S.ch&&S.ch.runs.find(r=>r.choreId===c.id)||null;
+function payFor(mid){
+  const ch=S.ch; if(!ch) return {earned:0,pending:0,fixedDone:0,fixedTotal:0,base:0,baseMax:0};
+  const fixed=ch.chores.filter(c=>c.kind==="fixed"&&c.assignee===mid);
+  const fixedDone=fixed.filter(c=>{const r=runOf(c);return r&&r.status==="approved";}).length;
+  let earned=0,pending=0;
+  for(const c of ch.chores){ const r=runOf(c); if(!r||r.memberId!==mid) continue; if(r.status==="approved") earned+=c.amount||0; else if(r.status==="pending") pending+=c.amount||0; }
+  const al=(ch.settings.allowance||{})[mid]; let base=0;
+  if(al&&al.amount){ if(!fixed.length) base=al.amount; else if(al.mode==="share") base=Math.round(al.amount*fixedDone/fixed.length); else base=fixedDone===fixed.length?al.amount:0; }
+  return {earned:earned+base,pending,fixedDone,fixedTotal:fixed.length,base,baseMax:al?al.amount:0,mode:al&&al.mode};
+}
+const kr=n=>new Intl.NumberFormat("nb-NO").format(n)+" kr";
+function canActFor(mid){ return isParent()||mid===myMid(); }
+function statusCell(c,r,mid){
+  if(r&&r.status==="approved") return `<span class="pill ok">✓ Godkjent</span>`;
+  if(r&&r.status==="pending") return `<span class="pill wait">Venter på godkjenning</span>`;
+  const btns=[];
+  if(r&&r.status==="rejected") btns.push(`<span class="pill no">Ikke godkjent</span>`);
+  if(c.kind==="pool"&&r&&r.status==="claimed"&&canActFor(r.memberId)) btns.push(`<button class="act light" data-chrel="${esc(c.id)}">Slipp</button>`);
+  if(canActFor(mid)) btns.push(`<button class="act" data-chdone="${esc(c.id)}">${r&&r.status==="rejected"?"Prøv igjen":"Ferdig ✓"}</button>`);
+  return `<div class="cbtns">${btns.join("")}</div>`;
+}
+function choreRow(c,mid){
+  const r=runOf(c); const parts=[];
+  if(c.amount) parts.push(`<span class="amt">${kr(c.amount)}</span>`);
+  if(c.kind==="pool"&&r&&r.status==="claimed"&&r.expiresAt){ const h=Math.max(0,Math.round((new Date(r.expiresAt)-Date.now())/36e5)); parts.push(`reservert · ${h} t igjen`); }
+  if(r&&r.status==="rejected"&&r.comment) parts.push(esc(r.comment));
+  if(c.photo) parts.push("📷 bilde");
+  return `<div class="crow"><button class="ct" ${isParent()?`data-chedit="${esc(c.id)}"`:""}><b>${esc(c.title)}</b><span>${parts.join(" · ")||"&nbsp;"}</span></button>${statusCell(c,r,mid)}</div>`;
+}
+function renderChores(){
+  const ch=S.ch; const wk=weekKey(S.anchor);
+  if(!ch||ch.week!==wk) return `<div class="empty"><b>Henter ukens oppgaver …</b></div>`;
+  const parent=isParent(); const ks=kids();
+  let h=`<div class="ch">`;
+  if(!ch.chores.length){
+    h+=`<div class="ch-empty"><b>Ingen oppgaver denne uken</b>
+      <span>Lag faste oppgaver for hvert barn, og ekstraoppgaver i børsen som barna kan ta etter «først til mølla». Barna krysser av med et bilde, og en forelder godkjenner.</span>
+      ${!S.members.some(m=>m.kid)?`<span>Tips: marker hvem som er barn under <b>Familie</b>.</span>`:""}
+      ${parent?`<div class="cbtns" style="justify-content:flex-start"><button class="act" data-act="chore-new">+ Ny oppgave</button><button class="act light" data-act="chore-ex">Legg inn eksempler</button></div>`:""}</div></div>`;
+    return h;
+  }
+  // 1) Godkjenning (foreldre)
+  const pend=ch.runs.filter(r=>r.status==="pending");
+  if(parent&&pend.length){
+    h+=`<section class="ch-sec"><h2>Venter på godkjenning <small>${pend.length}</small></h2>`;
+    for(const r of pend){ const c=ch.chores.find(x=>x.id===r.choreId); if(!c) continue; const m=member(r.memberId);
+      h+=`<div class="review"><button class="ph" ${r.photoId?`data-photo="${esc(r.photoId)}" data-phc="${esc(c.id)}" style="background-image:url('/api/photos/${esc(r.photoId)}')" aria-label="Vis bilde"`:"disabled"}>${r.photoId?"":"Uten bilde"}</button>
+        <div class="rb2"><b>${esc(m?m.name:"Noen")}: ${esc(c.title)}</b><span>${c.amount?kr(c.amount)+" · ":""}levert ${esc(r.doneAt?new Intl.DateTimeFormat("nb-NO",{weekday:"short",hour:"2-digit",minute:"2-digit"}).format(new Date(r.doneAt)):"")}</span>
+        <div class="cbtns" style="justify-content:flex-start"><button class="act" data-chok="${esc(c.id)}">Godkjenn</button><button class="act light" data-chno="${esc(c.id)}">Ikke godkjent</button></div></div></div>`; }
+    h+=`</section>`;
+  }
+  // 2) Ett kort per barn
+  const order=parent?ks:[...ks.filter(m=>m.id===myMid()),...ks.filter(m=>m.id!==myMid())];
+  h+=`<section class="ch-sec"><h2>Faste oppgaver</h2>`;
+  if(!order.length) h+=`<div class="ch-empty"><span>Ingen faste oppgaver ennå.${parent?" Lag en ny oppgave og velg et barn.":""}</span></div>`;
+  for(const m of order){
+    const fixed=ch.chores.filter(c=>c.kind==="fixed"&&c.assignee===m.id);
+    const mine=ch.chores.filter(c=>c.kind==="pool"&&(runOf(c)||{}).memberId===m.id);
+    const p=payFor(m.id); const pay=(ch.payouts||[]).find(x=>x.memberId===m.id);
+    const pct=p.fixedTotal?Math.round(100*p.fixedDone/p.fixedTotal):0;
+    h+=`<div class="kid" style="--pc:var(--m${m.c})"><div class="kid-h"><b><i></i>${esc(m.name)}</b><span class="sum">${kr(p.earned)}<small>${p.pending?`+ ${kr(p.pending)} venter`:(p.fixedTotal?`${p.fixedDone} av ${p.fixedTotal} faste`:"tjent")}</small></span>${p.fixedTotal?`<div class="prog"><span style="width:${pct}%"></span></div>`:""}</div>`;
+    h+=fixed.map(c=>choreRow(c,m.id)).join("");
+    if(mine.length) h+=mine.map(c=>choreRow({...c,title:c.title+" (børs)"},m.id)).join("");
+    if(!fixed.length&&!mine.length) h+=`<div class="crow"><span style="color:var(--muted)">Ingen oppgaver denne uken</span></div>`;
+    const al=p.baseMax?`Ukelønn ${kr(p.baseMax)} ${p.mode==="share"?"(andel per faste oppgave)":"(når alle faste er godkjent)"}`:"";
+    h+=`<div class="kid-f"><span>${al||"&nbsp;"}</span>${parent?(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span><button class="act light" data-unpay="${esc(m.id)}">Angre</button>`:`<button class="act light" data-pay="${esc(m.id)}" data-amt="${p.earned}" ${p.earned?"":"disabled"}>Marker ${kr(p.earned)} som utbetalt</button>`):(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span>`:"")}</div></div>`;
+  }
+  h+=`</section>`;
+  // 3) Børsen
+  const pool=ch.chores.filter(c=>c.kind==="pool");
+  h+=`<section class="ch-sec"><h2>Oppgavebørs <small>først til mølla · maks ${ch.settings.maxOpenClaims} om gangen · ${ch.settings.claimHours} t frist</small></h2>`;
+  if(!pool.length) h+=`<div class="ch-empty"><span>Ingen ekstraoppgaver ute nå.</span></div>`;
+  else h+=`<div class="pool">${pool.map(c=>{ const r=runOf(c);
+      if(!r) return `<div class="crow"><button class="ct" ${parent?`data-chedit="${esc(c.id)}"`:""}><b>${esc(c.title)}</b><span><span class="amt">${kr(c.amount||0)}</span>${c.photo?" · 📷 bilde":""}</span></button><button class="act take" data-claim="${esc(c.id)}">Jeg tar den</button></div>`;
+      const m=member(r.memberId);
+      const st=r.status==="claimed"?`Reservert av ${esc(m?m.name:"noen")}`:r.status==="pending"?`${esc(m?m.name:"Noen")} · venter på godkjenning`:r.status==="approved"?`✓ ${esc(m?m.name:"Noen")} · godkjent`:`${esc(m?m.name:"Noen")} · ikke godkjent`;
+      return `<div class="crow"><button class="ct" ${parent?`data-chedit="${esc(c.id)}"`:""}><b>${esc(c.title)}</b><span><span class="amt">${kr(c.amount||0)}</span> · ${st}</span></button>${r.status==="claimed"&&canActFor(r.memberId)?statusCell(c,r,r.memberId):(r.status==="rejected"&&canActFor(r.memberId)?statusCell(c,r,r.memberId):"")}</div>`; }).join("")}</div>`;
+  h+=`</section>`;
+  if(parent){
+    h+=`<div class="cbtns" style="justify-content:flex-start"><button class="act" data-act="chore-new">+ Ny oppgave</button></div>`;
+    const st=ch.settings;
+    h+=`<details class="ch-set"><summary>Ukelønn og regler</summary>
+      <div class="grid" id="set-grid"><b>Barn</b><b>Ukelønn (kr)</b><b class="mode">Regel</b>
+      ${(ks.length?ks:S.members).map(m=>{ const a=(st.allowance||{})[m.id]||{}; return `<span>${esc(m.name)}</span><input type="number" min="0" step="10" inputmode="numeric" data-al="${esc(m.id)}" value="${a.amount||""}" placeholder="0" aria-label="Ukelønn ${esc(m.name)}"><select class="mode" data-alm="${esc(m.id)}" aria-label="Regel ${esc(m.name)}"><option value="all" ${a.mode!=="share"?"selected":""}>Alle faste må gjøres</option><option value="share" ${a.mode==="share"?"selected":""}>Andel per oppgave</option></select>`; }).join("")}
+      <span>Maks reservert samtidig</span><input type="number" min="1" max="10" id="set-max" value="${st.maxOpenClaims}"><span class="mode"></span>
+      <span>Frist for reservert (timer)</span><input type="number" min="1" max="168" id="set-hours" value="${st.claimHours}"><span class="mode"></span>
+      </div><div class="cbtns" style="margin-top:10px"><button class="act" data-act="set-save">Lagre</button></div></details>`;
+  }
+  return h+`</div>`;
+}
+// Kort oppsummering for I dag
+function choresToday(){
+  const ch=S.ch; if(!ch||ch.week!==weekKey(today())||!ch.chores.length) return "";
+  if(isParent()){
+    const n=ch.runs.filter(r=>r.status==="pending").length;
+    return n?`<button class="banner" data-act="go-chores"><span>${n} ${n===1?"oppgave venter":"oppgaver venter"} på godkjenning</span><span>→</span></button>`:"";
+  }
+  const mid=myMid(); const open=ch.chores.filter(c=>{ const r=runOf(c); if(c.kind==="fixed") return c.assignee===mid&&!(r&&(r.status==="approved"||r.status==="pending")); return r&&r.memberId===mid&&(r.status==="claimed"||r.status==="rejected"); });
+  const free=ch.chores.filter(c=>c.kind==="pool"&&!runOf(c));
+  if(!open.length&&!free.length) return "";
+  return `<h2 class="sec-h">Dine oppgaver denne uken</h2><div class="mytasks">${open.map(c=>choreRow(c,mid)).join("")}${free.length?`<button class="banner" data-act="go-chores"><span>${free.length} ledige ekstraoppgaver i børsen</span><span>→</span></button>`:""}</div>`;
+}
+// Stripe på tavla
+function choresBoard(){
+  const ch=S.ch; if(!ch||ch.week!==weekKey(today())||!ch.chores.length) return "";
+  const ks=kids(); const free=ch.chores.filter(c=>c.kind==="pool"&&!runOf(c));
+  return `<section class="bd-tmsec"><h2>Ukens oppgaver</h2><div class="bd-chores">${ks.map(m=>{ const p=payFor(m.id); const pct=p.fixedTotal?Math.round(100*p.fixedDone/p.fixedTotal):0;
+    return `<button class="bd-kid" data-act="go-chores" style="--pc:var(--m${m.c})"><span class="top"><b><i></i>${esc(m.name)}</b><span>${p.fixedTotal?`${p.fixedDone}/${p.fixedTotal} · `:""}${kr(p.earned)}</span></span>${p.fixedTotal?`<span class="prog small"><span style="width:${pct}%"></span></span>`:""}</button>`; }).join("")}</div>
+    ${free.length?`<div class="bd-pool"><b>Ledig i børsen:</b>${free.map(c=>`<button class="act take" data-claim="${esc(c.id)}">${esc(c.title)} · ${kr(c.amount||0)}</button>`).join("")}</div>`:""}</section>`;
+}
+
+// handlinger
+async function chorePost(path,body,okMsg){
+  try{ await api(path,{method:"POST",body:{week:S.ch.week,...body}}); if(okMsg) toast(okMsg); }
+  catch(e){ if(e.status!==401) toast(e.error); }
+  await loadChores();
+}
+function pickKid(title,cb){
+  const ks=kids().length?kids():S.members;
+  $("#pk-h").textContent=title;
+  $("#pk-list").innerHTML=ks.map(m=>`<button type="button" data-pk="${esc(m.id)}" style="font-size:1.05rem;padding:10px 16px"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
+  pickCb=cb; $("#dlg-pickkid").showModal();
+}
+let pickCb=null;
+$("#pk-list").addEventListener("click",e=>{ const b=e.target.closest("[data-pk]"); if(!b) return; $("#dlg-pickkid").close(); const cb=pickCb; pickCb=null; if(cb) cb(b.dataset.pk); });
+function claim(id){
+  if(!isParent()) return chorePost(`/api/chores/${encodeURIComponent(id)}/claim`,{},"Den er din! Gjør den ferdig innen fristen.");
+  const c=S.ch.chores.find(x=>x.id===id);
+  pickKid(`Hvem tar «${c?c.title:"oppgaven"}»?`,mid=>chorePost(`/api/chores/${encodeURIComponent(id)}/claim`,{memberId:mid},`${(member(mid)||{}).name||"Barnet"} tar den`));
+}
+// Ferdig-dialog med bilde
+let doneState=null;
+function openDone(id){
+  const c=S.ch.chores.find(x=>x.id===id); if(!c) return; const r=runOf(c);
+  const who=c.kind==="fixed"?c.assignee:(r&&r.memberId)||null;
+  doneState={id,c,photo:null,memberId:who};
+  $("#done-h").textContent=c.title;
+  $("#done-info").textContent=(c.amount?kr(c.amount)+" · ":"")+(c.photo?"Ta et bilde som viser at den er gjort. En forelder godkjenner.":"En forelder godkjenner.");
+  const needWho=isParent()&&!who; $("#done-who-row").hidden=!needWho;
+  if(needWho){ const ks=kids().length?kids():S.members; $("#done-who").innerHTML=ks.map(m=>`<button type="button" data-dw="${esc(m.id)}" aria-pressed="false"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join(""); }
+  $("#done-prev").hidden=true; $("#done-err").hidden=true; $("#done-pick").textContent="Ta bilde";
+  $("#done-pick").hidden=false; $("#done-go").disabled=!!c.photo;
+  $("#dlg-done").showModal();
+}
+$("#done-who").addEventListener("click",e=>{ const b=e.target.closest("[data-dw]"); if(!b) return; doneState.memberId=b.dataset.dw; $("#done-who").querySelectorAll("[data-dw]").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); });
+$("#done-pick").addEventListener("click",()=>$("#done-file").click());
+$("#done-file").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f||!doneState) return;
+  try{ const b64=await shrinkPhoto(f,1280,0.8); doneState.photo=b64; const im=$("#done-prev"); im.src="data:image/jpeg;base64,"+b64; im.hidden=false; $("#done-pick").textContent="Ta nytt bilde"; $("#done-go").disabled=false; }
+  catch(x){ const er=$("#done-err"); er.textContent=(x&&x.error)||"Bildet kunne ikke åpnes."; er.hidden=false; }
+});
+function shrinkPhoto(file,max,q){
+  return new Promise((ok,fail)=>{ const url=URL.createObjectURL(file); const img=new Image();
+    img.onload=()=>{ let w=img.naturalWidth,h=img.naturalHeight; const k=Math.min(1,max/Math.max(w,h)); w=Math.round(w*k); h=Math.round(h*k);
+      const cv=document.createElement("canvas"); cv.width=w; cv.height=h; const g=cv.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,w,h); g.drawImage(img,0,0,w,h); URL.revokeObjectURL(url); ok(cv.toDataURL("image/jpeg",q).split(",")[1]); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); fail({error:"Bildet kunne ikke åpnes. Prøv igjen."}); }; img.src=url; });
+}
+$("#doneform").addEventListener("submit",async ev=>{
+  ev.preventDefault(); const d=doneState; if(!d) return;
+  if(d.c.photo&&!d.photo){ const er=$("#done-err"); er.textContent="Ta et bilde først."; er.hidden=false; return; }
+  if(isParent()&&!d.memberId){ const er=$("#done-err"); er.textContent="Velg hvem som gjorde den."; er.hidden=false; return; }
+  $("#done-go").disabled=true;
+  try{ await api(`/api/chores/${encodeURIComponent(d.id)}/done`,{method:"POST",body:{week:S.ch.week,photo:d.photo||"",memberId:d.memberId||""}}); $("#dlg-done").close(); toast("Sendt til godkjenning 🎉"); }
+  catch(e){ const er=$("#done-err"); er.textContent=e.error||"Noe gikk galt."; er.hidden=false; }
+  finally{ $("#done-go").disabled=false; }
+  await loadChores();
+});
+// Ny/endre oppgave
+let choreEdit=null;
+function openChore(c){
+  choreEdit=c?{...c}:{id:"c"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),title:"",kind:"fixed",assignee:"",amount:0,repeat:"weekly",photo:true};
+  const isNew=!c; $("#chore-h").textContent=isNew?"Ny oppgave":"Endre oppgave";
+  $("#chore-title").value=choreEdit.title; $("#chore-amount").value=choreEdit.amount||""; $("#chore-repeat").value=choreEdit.repeat; $("#chore-photo").checked=choreEdit.photo!==false;
+  drawChoreForm(); const del=$("#chore-del"); del.hidden=isNew; del.textContent="Slett"; del.dataset.armed="";
+  $("#dlg-chore").showModal(); setTimeout(()=>$("#chore-title").focus(),30);
+}
+function drawChoreForm(){
+  const x=choreEdit;
+  $("#chore-kind").querySelectorAll("[data-kind]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.kind===x.kind)));
+  $("#chore-who-row").hidden=x.kind!=="fixed";
+  const ks=S.members.filter(m=>m.kid).length?S.members.filter(m=>m.kid):S.members;
+  $("#chore-who").innerHTML=ks.map(m=>`<button type="button" data-cw="${esc(m.id)}" aria-pressed="${x.assignee===m.id}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
+  $("#chore-hint").textContent=x.kind==="pool"?"Legges i børsen. Det barnet som trykker «Jeg tar den» først, får den.":"Bare dette barnet kan gjøre den. Teller med i ukelønnen.";
+}
+$("#chore-kind").addEventListener("click",e=>{ const b=e.target.closest("[data-kind]"); if(!b) return; choreEdit.kind=b.dataset.kind; drawChoreForm(); });
+$("#chore-who").addEventListener("click",e=>{ const b=e.target.closest("[data-cw]"); if(!b) return; choreEdit.assignee=b.dataset.cw; drawChoreForm(); });
+$("#choreform").addEventListener("submit",async ev=>{
+  ev.preventDefault(); const x=choreEdit;
+  x.title=$("#chore-title").value.trim(); x.amount=parseInt($("#chore-amount").value,10)||0; x.repeat=$("#chore-repeat").value; x.photo=$("#chore-photo").checked;
+  if(!x.title){ toast("Gi oppgaven et navn"); return; }
+  if(x.kind==="fixed"&&!x.assignee){ toast("Velg hvem oppgaven gjelder"); return; }
+  const body={...x}; delete body.id; if(!S.ch.chores.some(c=>c.id===x.id)) body.fromWeek=S.ch.week;
+  $("#dlg-chore").close();
+  try{ await api(`/api/chores/${encodeURIComponent(x.id)}`,{method:"PUT",body}); toast("Oppgaven er lagret"); }catch(e){ if(e.status!==401) toast(e.error); }
+  await loadChores();
+});
+$("#chore-del").addEventListener("click",async function(){
+  if(!this.dataset.armed){ this.dataset.armed="1"; this.textContent="Trykk igjen for å slette"; return; }
+  const id=choreEdit.id; $("#dlg-chore").close();
+  try{ await api(`/api/chores/${encodeURIComponent(id)}`,{method:"DELETE"}); toast("Oppgaven er slettet"); }catch(e){ if(e.status!==401) toast(e.error); }
+  await loadChores();
+});
+async function choreExamples(){
+  const ks=S.members.filter(m=>m.kid); const list=ks.length?ks:S.members.slice(1).length?S.members.slice(1):S.members;
+  const ex=[]; const fixed=["Rydde rommet","Ta ut av oppvaskmaskinen","Gå ut med søpla"];
+  list.slice(0,3).forEach((m,i)=>{ ex.push({title:fixed[i%3],kind:"fixed",assignee:m.id,amount:0,repeat:"weekly",photo:true}); ex.push({title:"Dekke på og av bordet",kind:"fixed",assignee:m.id,amount:0,repeat:"weekly",photo:false}); });
+  ex.push({title:"Vaske bilen",kind:"pool",amount:80,repeat:"weekly",photo:true},{title:"Bære inn ved",kind:"pool",amount:30,repeat:"weekly",photo:true},{title:"Støvsuge stua",kind:"pool",amount:40,repeat:"weekly",photo:true});
+  for(const c of ex){ await api(`/api/chores/c${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`,{method:"PUT",body:{...c,fromWeek:S.ch.week}}).catch(()=>{}); }
+  const al={}; list.slice(0,3).forEach(m=>al[m.id]={amount:100,mode:"all"});
+  await api("/api/chore-settings",{method:"PUT",body:{maxOpenClaims:2,claimHours:24,allowance:al}}).catch(()=>{});
+  toast("Eksempler lagt inn. Endre dem som du vil."); await loadChores();
+}
+// Bildevisning og godkjenning fra bildet
+function openPhoto(photoId,choreId){
+  $("#ph-big").src="/api/photos/"+encodeURIComponent(photoId);
+  const c=S.ch.chores.find(x=>x.id===choreId); const r=c&&runOf(c); const m=r&&member(r.memberId);
+  $("#ph-h").textContent=c?`${m?m.name+": ":""}${c.title}`:"Bilde";
+  $("#ph-foot").innerHTML=isParent()&&r&&r.status==="pending"?`<button class="btn" data-chno="${esc(choreId)}">Ikke godkjent</button><button class="btn primary" data-chok="${esc(choreId)}">Godkjenn</button>`:`<button class="btn" data-close>Lukk</button>`;
+  $("#dlg-photo").showModal();
+}
+document.addEventListener("click",async e=>{
+  const t=e.target;
+  const b=t.closest("[data-chdone],[data-chrel],[data-chok],[data-chno],[data-claim],[data-chedit],[data-pay],[data-unpay],[data-photo],[data-new]");
+  if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  if(b.dataset.new){ $("#dlg-new").close(); const k=b.dataset.new; if(k==="event") openEvent(null); else if(k==="sms") openSms(""); else if(k==="note") openNote(null); else if(k==="chore"){ if(!S.ch) await loadChores(); openChore(null); } return; }
+  if(b.dataset.photo){ openPhoto(b.dataset.photo,b.dataset.phc); return; }
+  if(b.dataset.chdone){ openDone(b.dataset.chdone); return; }
+  if(b.dataset.chrel){ return chorePost(`/api/chores/${encodeURIComponent(b.dataset.chrel)}/release`,{},"Oppgaven er tilbake i børsen"); }
+  if(b.dataset.chok||b.dataset.chno){ const id=b.dataset.chok||b.dataset.chno; if($("#dlg-photo").open) $("#dlg-photo").close(); return chorePost(`/api/chores/${encodeURIComponent(id)}/review`,{approve:!!b.dataset.chok},b.dataset.chok?"Godkjent ✓":"Markert som ikke godkjent"); }
+  if(b.dataset.claim){ return claim(b.dataset.claim); }
+  if(b.dataset.chedit){ const c=S.ch.chores.find(x=>x.id===b.dataset.chedit); if(c) openChore(c); return; }
+  if(b.dataset.pay||b.dataset.unpay){ const mid=b.dataset.pay||b.dataset.unpay;
+    try{ await api("/api/payouts",{method:"POST",body:{week:S.ch.week,memberId:mid,amount:+b.dataset.amt||0,paid:!!b.dataset.pay}}); toast(b.dataset.pay?"Markert som utbetalt":"Utbetaling angret"); }catch(x){ if(x.status!==401) toast(x.error); }
+    return loadChores(); }
+},true);
+function openNew(){ $("#new-chore").hidden=!isParent(); $("#dlg-new").showModal(); }
+async function saveChoreSettings(){
+  const al={}; document.querySelectorAll("[data-al]").forEach(i=>{ const v=parseInt(i.value,10)||0; if(v) al[i.dataset.al]={amount:v,mode:(document.querySelector(`[data-alm="${i.dataset.al}"]`)||{}).value||"all"}; });
+  try{ await api("/api/chore-settings",{method:"PUT",body:{allowance:al,maxOpenClaims:$("#set-max").value,claimHours:$("#set-hours").value}}); toast("Lagret"); }catch(e){ if(e.status!==401) toast(e.error); }
+  await loadChores();
+}
+
 // ---------- beskjeder ----------
 const dNote=$("#dlg-note"); let noteEdit=null;
 function myMemberId(){ const first=(S.me&&S.me.user.name||"").split(/\s+/)[0].toLowerCase(); const m=S.members.find(x=>x.name.split(/\s+/)[0].toLowerCase()===first); return m?m.id:(S.members[0]&&S.members[0].id)||""; }
@@ -1223,7 +1618,9 @@ const dFam=$("#dlg-family"); let famDraft=[];
 function openFam(){ famDraft=S.members.map(m=>({...m})); drawFam(); drawAcct(); feedWho=[]; drawFeedWho(); loadFeeds(); $("#feed-err").hidden=true; $("#inv-box").hidden=true; $("#inv-share").hidden=true; dFam.showModal(); }
 function drawAcct(){
   const me=S.me; if(!me) return;
-  $("#acct-list").innerHTML=(me.family.accounts||[]).map(a=>`<li>${esc(a.name)} · ${esc(a.email)}${a.role==="owner"?" (opprettet familien)":""}</li>`).join("");
+  $("#acct-list").innerHTML=(me.family.accounts||[]).map(a=>`<li>${esc(a.name)} · ${esc(a.email)}${a.role==="owner"?" (opprettet familien)":""}${a.kind==="child"?" (barn)":""}</li>`).join("");
+  const child=me.user.kind==="child";
+  $("#inv-make").parentElement.parentElement.hidden=child; $("#fam-add").hidden=child; $("#fam-save").hidden=child; $("#feeds-sec").hidden=child;
   $("#acct-me").textContent="Innlogget som "+me.user.email;
 }
 // ---------- kalenderabonnement ----------
@@ -1255,10 +1652,12 @@ $("#feed-list").addEventListener("click",async e=>{
 });
 
 let invUrl="";
-$("#inv-make").addEventListener("click",async()=>{
-  try{ const j=await api("/api/invites",{method:"POST",body:{}}); invUrl=j.url; $("#inv-url").value=j.url; $("#inv-box").hidden=false; $("#inv-share").hidden=!navigator.share; $("#inv-make").textContent="Lag ny lenke"; }
+async function makeInvite(kind){
+  try{ const j=await api("/api/invites",{method:"POST",body:{kind}}); invUrl=j.url; $("#inv-url").value=j.url; $("#inv-box").hidden=false; $("#inv-share").hidden=!navigator.share; toast(kind==="child"?"Lenke for barn er laget":"Lenke for forelder er laget"); }
   catch(e){ if(e.status!==401) toast(e.error); }
-});
+}
+$("#inv-make").addEventListener("click",()=>makeInvite("parent"));
+$("#inv-make-kid").addEventListener("click",()=>makeInvite("child"));
 $("#inv-copy").addEventListener("click",async()=>{
   try{ await navigator.clipboard.writeText(invUrl); toast("Lenken er kopiert"); }
   catch{ const i=$("#inv-url"); i.focus(); i.select(); toast("Marker og kopier lenken"); }
@@ -1269,11 +1668,12 @@ $("#open-fam").addEventListener("click",()=>openFam());
 function drawFam(){
   $("#fam-body").innerHTML=famDraft.map((m,i)=>`<div class="mrow"><input class="f" id="fam-${esc(m.id)}" value="${esc(m.name)}" data-i="${i}" aria-label="Navn" style="border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px">
     <div class="swatch">${[...Array(COLORS)].map((_,c)=>`<button type="button" data-i="${i}" data-c="${c+1}" aria-label="Farge ${c+1}" aria-pressed="${m.c===c+1}" style="background:var(--m${c+1})"></button>`).join("")}</div>
-    <button type="button" class="btn ghost" data-rm="${i}" aria-label="Fjern">✕</button></div>`).join("")
+    <button type="button" class="btn ghost" data-rm="${i}" aria-label="Fjern">✕</button>
+    <button type="button" class="chip kidflag" data-kidi="${i}" aria-pressed="${!!m.kid}" style="grid-column:1/-1;justify-self:start">${m.kid?"✓ Barn (får oppgaver)":"Marker som barn"}</button></div>`).join("")
     +`<p style="margin:0;font-size:.85rem;color:var(--muted)">Navnene brukes også til å foreslå hvem en SMS gjelder.</p>`;
 }
 $("#fam-body").addEventListener("input",e=>{if(e.target.dataset.i!==undefined&&e.target.tagName==="INPUT") famDraft[+e.target.dataset.i].name=e.target.value});
-$("#fam-body").addEventListener("click",e=>{const c=e.target.closest("[data-c]"); if(c){famDraft[+c.dataset.i].c=+c.dataset.c;drawFam();return}
+$("#fam-body").addEventListener("click",e=>{const k=e.target.closest("[data-kidi]"); if(k){ const m=famDraft[+k.dataset.kidi]; m.kid=!m.kid; drawFam(); return; } const c=e.target.closest("[data-c]"); if(c){famDraft[+c.dataset.i].c=+c.dataset.c;drawFam();return}
   const r=e.target.closest("[data-rm]"); if(r&&famDraft.length>1){famDraft.splice(+r.dataset.rm,1);drawFam();}});
 $("#fam-add").addEventListener("click",()=>{famDraft.push({id:"m"+Date.now().toString(36),name:"",c:(famDraft.length%COLORS)+1});drawFam();});
 $("#fam-save").addEventListener("click",()=>{const list=famDraft.filter(m=>m.name.trim()).map(m=>({...m,name:m.name.trim()})); if(!list.length) return; dFam.close(); saveMembers(list);});
@@ -1281,11 +1681,10 @@ $("#fam-save").addEventListener("click",()=>{const list=famDraft.filter(m=>m.nam
 // ---------- wiring ----------
 document.querySelectorAll("dialog").forEach(d=>d.addEventListener("click",e=>{ if(e.target.closest("[data-close]")) d.close(); if(e.target===d) d.close(); }));
 document.querySelectorAll(".tabs button,.bottombar [data-view]").forEach(b=>b.addEventListener("click",()=>{ if(b.dataset.view==="day"&&S.view==="day") S.anchor=today(); S.view=b.dataset.view; render(); window.scrollTo({top:0}); }));
-$("#bb-new").addEventListener("click",()=>openEvent(null));
-$("#bb-sms").addEventListener("click",()=>openSms(""));
+$("#bb-new").addEventListener("click",()=>openNew());
 $("#prev").addEventListener("click",()=>step(-1)); $("#next").addEventListener("click",()=>step(1));
 $("#todayBtn").addEventListener("click",()=>{S.anchor=today();render()});
-function step(n){ const a=S.anchor; if(S.view==="day") S.anchor=addDays(a,n); else if(S.view==="week") S.anchor=addDays(a,7*n); else S.anchor=new Date(a.getFullYear(),a.getMonth()+n,1); render(); }
+function step(n){ const a=S.anchor; if(S.view==="day") S.anchor=addDays(a,n); else if(S.view==="week"||S.view==="chores") S.anchor=addDays(a,7*n); else S.anchor=new Date(a.getFullYear(),a.getMonth()+n,1); render(); }
 $("#open-new").addEventListener("click",()=>openEvent(null));
 $("#open-sms").addEventListener("click",()=>openSms(""));
 document.addEventListener("click",e=>{
@@ -1296,7 +1695,7 @@ document.addEventListener("click",e=>{
   const mem=e.target.closest("[data-mem]"); if(mem){ const id=mem.dataset.mem; S.hidden.has(id)?S.hidden.delete(id):S.hidden.add(id); render(); return; }
   if(e.target.closest("#edit-fam")){ openFam(); return; }
   const act=e.target.closest("[data-act]"); if(act){ const a=act.dataset.act;
-    if(a==="note"){ openNote(null); } else if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
+    if(a==="chore-new"){ openChore(null); } else if(a==="chore-ex"){ choreExamples(); } else if(a==="set-save"){ saveChoreSettings(); } else if(a==="go-chores"){ if(S.board) setBoard(false); S.view="chores"; S.anchor=today(); render(); window.scrollTo({top:0}); } else if(a==="note"){ openNote(null); } else if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
 });
 document.addEventListener("paste",e=>{
   if(e.target.closest("input,textarea,dialog")||S.readOnly) return;
@@ -1333,6 +1732,7 @@ function renderBoard(){
     ${ns.length?`<div class="bd-msgs">${ns.map(noteHtml).join("")}</div>`:""}
     ${window.innerWidth<700 ? `<div class="bd-list">${list.length?`<div class="rows">${list.map(e=>evRow(e,rowState(e,true,nm,null),iso(d))).join("")}</div>`:`<div class="bd-free">Ingen avtaler i dag</div>`}</div>` :
     `<div class="bd-cols" style="--cols:${Math.min(Math.max(cols.length,1),6)}">${cols.map(c=>`<section class="bd-col" style="--pc:${c.pc}"><h2>${esc(c.name)}<small>${c.items.length||""}</small></h2>${c.items.length?c.items.map(card).join(""):`<div class="bd-free">Fri i dag</div>`}</section>`).join("")}</div>`}
+    ${choresBoard()}
     <section class="bd-tmsec"><h2>I morgen</h2>${tomorrowList(d)}</section>`;
 }
 function fsSupported(){ const r=document.documentElement; return !!(r.requestFullscreen||r.webkitRequestFullscreen); }

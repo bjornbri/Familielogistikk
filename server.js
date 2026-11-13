@@ -77,6 +77,46 @@ async function migrate() {
       event_count int not null default 0,
       created_at timestamptz not null default now()
     );
+    alter table users add column if not exists kind text not null default 'parent';
+    alter table users add column if not exists member_id text;
+    alter table invites add column if not exists kind text not null default 'parent';
+    alter table families add column if not exists settings jsonb not null default '{}';
+    create table if not exists chores (
+      id text not null,
+      family_id uuid not null references families(id) on delete cascade,
+      data jsonb not null,
+      updated_at timestamptz not null default now(),
+      primary key (family_id, id)
+    );
+    create table if not exists chore_runs (
+      family_id uuid not null references families(id) on delete cascade,
+      chore_id text not null,
+      week text not null,
+      member_id text not null,
+      status text not null,
+      claimed_at timestamptz,
+      done_at timestamptz,
+      photo_id uuid,
+      reviewed_by uuid references users(id) on delete set null,
+      reviewed_at timestamptz,
+      comment text,
+      primary key (family_id, chore_id, week)
+    );
+    create table if not exists photos (
+      id uuid primary key default gen_random_uuid(),
+      family_id uuid not null references families(id) on delete cascade,
+      data bytea not null,
+      created_at timestamptz not null default now()
+    );
+    create table if not exists payouts (
+      family_id uuid not null references families(id) on delete cascade,
+      member_id text not null,
+      week text not null,
+      amount int not null,
+      paid_by uuid references users(id) on delete set null,
+      paid_at timestamptz not null default now(),
+      primary key (family_id, member_id, week)
+    );
     create table if not exists confirmations (
       family_id uuid not null references families(id) on delete cascade,
       event_id text not null,
@@ -173,7 +213,7 @@ async function auth(req, res, next) {
   const t = parseCookies(req.headers.cookie).fl_sess;
   if (!t) return res.status(401).json({ error: "Ikke innlogget." });
   const { rows } = await pool.query(
-    `select u.id, u.name, u.email, u.role, u.family_id
+    `select u.id, u.name, u.email, u.role, u.family_id, u.kind, u.member_id
        from sessions s join users u on u.id = s.user_id
       where s.token_hash = $1 and s.expires_at > now()`,
     [sha(t)]
@@ -186,11 +226,19 @@ async function auth(req, res, next) {
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 async function familyPayload(user) {
-  const f = await pool.query(`select id, name, members from families where id = $1`, [user.family_id]);
-  const people = await pool.query(`select id, name, email, role from users where family_id = $1 order by created_at`, [user.family_id]);
+  const f = await pool.query(`select id, name, members, settings from families where id = $1`, [user.family_id]);
+  const members = f.rows[0].members || [];
+  // Koble kontoen til en person i familien (første gang: på fornavn)
+  if (!user.member_id || !members.some((m) => m.id === user.member_id)) {
+    const first = String(user.name).split(/\s+/)[0].toLowerCase();
+    const m = members.find((x) => String(x.name).split(/\s+/)[0].toLowerCase() === first);
+    user.member_id = m ? m.id : null;
+    if (m) await pool.query(`update users set member_id = $1 where id = $2`, [m.id, user.id]);
+  }
+  const people = await pool.query(`select id, name, email, role, kind, member_id from users where family_id = $1 order by created_at`, [user.family_id]);
   return {
-    user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    family: { name: f.rows[0].name, members: f.rows[0].members, accounts: people.rows },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, kind: user.kind || "parent", memberId: user.member_id },
+    family: { name: f.rows[0].name, members, accounts: people.rows.map((a) => ({ id: a.id, name: a.name, email: a.email, role: a.role, kind: a.kind, memberId: a.member_id })), settings: f.rows[0].settings || {} },
     imageReading: !!ANTHROPIC_API_KEY,
     placesSearch: !!GOOGLE_MAPS_API_KEY,
   };
@@ -212,34 +260,41 @@ app.post("/api/register", throttle(10, 15 * 60e3), wrap(async (req, res) => {
     const exists = await client.query(`select 1 from users where lower(email) = $1`, [email]);
     if (exists.rows[0]) { await client.query("rollback"); return res.status(409).json({ error: "Det finnes allerede en konto med denne e-posten. Logg inn i stedet." }); }
 
-    let familyId, role = "owner";
+    let familyId, role = "owner", kind = "parent", memberId = null;
     if (invite) {
       const inv = await client.query(
-        `select family_id from invites where token_hash = $1 and expires_at > now() and used_at is null for update`,
+        `select family_id, kind from invites where token_hash = $1 and expires_at > now() and used_at is null for update`,
         [sha(invite)]
       );
       if (!inv.rows[0]) { await client.query("rollback"); return res.status(400).json({ error: "Invitasjonen er brukt eller utløpt. Be om en ny lenke." }); }
       familyId = inv.rows[0].family_id;
       role = "member";
+      kind = inv.rows[0].kind === "child" ? "child" : "parent";
       await client.query(`update invites set used_at = now() where token_hash = $1`, [sha(invite)]);
       // Add the new person to the calendar's family list if they aren't there yet
       const f = await client.query(`select members from families where id = $1`, [familyId]);
       const members = f.rows[0].members || [];
       const first = name.split(/\s+/)[0].toLowerCase();
-      if (!members.some((m) => String(m.name).split(/\s+/)[0].toLowerCase() === first)) {
-        members.push({ id: "m" + crypto.randomBytes(4).toString("hex"), name: name.split(/\s+/)[0], c: (members.length % COLORS) + 1 });
+      const existing = members.find((m) => String(m.name).split(/\s+/)[0].toLowerCase() === first);
+      if (existing) {
+        memberId = existing.id;
+        if (kind === "child" && !existing.kid) { existing.kid = true; await client.query(`update families set members = $1 where id = $2`, [JSON.stringify(members), familyId]); }
+      } else {
+        memberId = "m" + crypto.randomBytes(4).toString("hex");
+        members.push({ id: memberId, name: name.split(/\s+/)[0], c: (members.length % COLORS) + 1, ...(kind === "child" ? { kid: true } : {}) });
         await client.query(`update families set members = $1 where id = $2`, [JSON.stringify(members), familyId]);
       }
     } else {
       const surname = name.split(/\s+/).length > 1 ? name.split(/\s+/).slice(-1)[0] : name;
-      const members = [{ id: "m" + crypto.randomBytes(4).toString("hex"), name: name.split(/\s+/)[0], c: 1 }];
+      memberId = "m" + crypto.randomBytes(4).toString("hex");
+      const members = [{ id: memberId, name: name.split(/\s+/)[0], c: 1 }];
       const f = await client.query(`insert into families (name, members) values ($1, $2) returning id`, ["Familien " + surname, JSON.stringify(members)]);
       familyId = f.rows[0].id;
     }
     const hash = await bcrypt.hash(password, 11);
     const u = await client.query(
-      `insert into users (family_id, name, email, password_hash, role) values ($1, $2, $3, $4, $5) returning id`,
-      [familyId, name, email, hash, role]
+      `insert into users (family_id, name, email, password_hash, role, kind, member_id) values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      [familyId, name, email, hash, role, kind, memberId]
     );
     await client.query("commit");
     await createSession(res, u.rows[0].id);
@@ -273,13 +328,16 @@ app.get("/api/me", wrap(auth), wrap(async (req, res) => {
   res.json(await familyPayload(req.user));
 }));
 
-app.put("/api/family", wrap(auth), wrap(async (req, res) => {
+const parentOnly = (req, res, next) => (req.user.kind === "child" ? res.status(403).json({ error: "Bare foreldre kan gjøre dette." }) : next());
+
+app.put("/api/family", wrap(auth), parentOnly, wrap(async (req, res) => {
   const list = Array.isArray(req.body.members) ? req.body.members : null;
   if (!list || !list.length || list.length > 20) return res.status(400).json({ error: "Familien må ha mellom 1 og 20 personer." });
   const members = list.map((m) => ({
     id: clean(m.id, 40) || "m" + crypto.randomBytes(4).toString("hex"),
     name: clean(m.name, 40),
     c: Math.min(Math.max(parseInt(m.c, 10) || 1, 1), COLORS),
+    ...(m.kid ? { kid: true } : {}),
   })).filter((m) => m.name);
   const name = clean(req.body.name, 60);
   await pool.query(`update families set members = $1${name ? ", name = $3" : ""} where id = $2`,
@@ -288,11 +346,12 @@ app.put("/api/family", wrap(auth), wrap(async (req, res) => {
 }));
 
 // Invites: any account in the family may create a link; it works once and expires after 7 days
-app.post("/api/invites", wrap(auth), wrap(async (req, res) => {
+app.post("/api/invites", wrap(auth), parentOnly, wrap(async (req, res) => {
   const t = token();
+  const kind = req.body && req.body.kind === "child" ? "child" : "parent";
   await pool.query(
-    `insert into invites (token_hash, family_id, created_by, expires_at) values ($1, $2, $3, now() + interval '${INVITE_DAYS} days')`,
-    [sha(t), req.user.family_id, req.user.id]
+    `insert into invites (token_hash, family_id, created_by, expires_at, kind) values ($1, $2, $3, now() + interval '${INVITE_DAYS} days', $4)`,
+    [sha(t), req.user.family_id, req.user.id, kind]
   );
   const base = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`;
   res.json({ url: `${base}/?invite=${t}`, days: INVITE_DAYS });
@@ -300,13 +359,13 @@ app.post("/api/invites", wrap(auth), wrap(async (req, res) => {
 
 app.get("/api/invites/:token", wrap(async (req, res) => {
   const { rows } = await pool.query(
-    `select f.name, u.name as inviter from invites i join families f on f.id = i.family_id
+    `select f.name, u.name as inviter, i.kind from invites i join families f on f.id = i.family_id
        left join users u on u.id = i.created_by
       where i.token_hash = $1 and i.expires_at > now() and i.used_at is null`,
     [sha(clean(req.params.token, 100))]
   );
   if (!rows[0]) return res.status(404).json({ error: "Invitasjonen er brukt eller utløpt." });
-  res.json({ family: rows[0].name, inviter: rows[0].inviter });
+  res.json({ family: rows[0].name, inviter: rows[0].inviter, kind: rows[0].kind });
 }));
 
 // Events
@@ -509,6 +568,233 @@ app.get("/api/places/:id", throttle(200, 60 * 60e3), wrap(auth), wrap(async (req
   res.json({ placeId: p.id, name: p.displayName?.text || "", address: p.shortFormattedAddress || p.formattedAddress || "", mapsUrl: p.googleMapsUri || "" });
 }));
 
+// ---------- Ukesoppgaver ----------
+// Uke-nøkkel «2026-W46» (ISO-uke, norsk tid)
+function weekKeyOf(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d)); const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return t.getUTCFullYear() + "-W" + String(Math.ceil(((t - y0) / 864e5 + 1) / 7)).padStart(2, "0");
+}
+const currentWeek = () => weekKeyOf(oslo(new Date()).date);
+const validWeek = (w) => /^\d{4}-W\d{2}$/.test(w || "");
+const weekLE = (a, b) => a <= b; // «2026-W09» sorterer riktig som tekst
+const CHORE_DEFAULTS = { maxOpenClaims: 2, claimHours: 24, allowance: {} };
+async function choreSettings(familyId) {
+  const r = await pool.query(`select settings from families where id = $1`, [familyId]);
+  const st = (r.rows[0] && r.rows[0].settings && r.rows[0].settings.chores) || {};
+  return { ...CHORE_DEFAULTS, ...st, allowance: st.allowance || {} };
+}
+function cleanChore(b, existing) {
+  const o = {
+    title: clean(b.title, 80),
+    amount: Math.max(0, Math.min(10000, parseInt(b.amount, 10) || 0)),
+    kind: b.kind === "pool" ? "pool" : "fixed",
+    assignee: clean(String(b.assignee || ""), 40),
+    repeat: b.repeat === "once" ? "once" : "weekly",
+    photo: b.photo !== false,
+    note: clean(b.note, 200),
+    fromWeek: validWeek(b.fromWeek) ? b.fromWeek : (existing && existing.fromWeek) || currentWeek(),
+    archivedAfter: existing && existing.archivedAfter ? existing.archivedAfter : null,
+    created: (existing && existing.created) || Date.now(),
+  };
+  if (o.kind === "pool") o.assignee = "";
+  return o;
+}
+function choreActive(c, week) {
+  if (c.repeat === "once") return c.fromWeek === week;
+  if (!weekLE(c.fromWeek, week)) return false;
+  if (c.archivedAfter && week > c.archivedAfter) return false;
+  return true;
+}
+async function releaseExpiredClaims(familyId, hours) {
+  await pool.query(
+    `delete from chore_runs where family_id = $1 and status = 'claimed' and claimed_at < now() - ($2 || ' hours')::interval`,
+    [familyId, String(hours)]
+  );
+}
+
+app.get("/api/chores", wrap(auth), wrap(async (req, res) => {
+  const week = validWeek(req.query.week) ? req.query.week : currentWeek();
+  const settings = await choreSettings(req.user.family_id);
+  await releaseExpiredClaims(req.user.family_id, settings.claimHours);
+  const ch = await pool.query(`select id, data from chores where family_id = $1`, [req.user.family_id]);
+  const chores = ch.rows.map((r) => ({ id: r.id, ...r.data })).filter((c) => choreActive(c, week));
+  const runs = await pool.query(
+    `select chore_id, member_id, status, claimed_at, done_at, photo_id, reviewed_at, comment from chore_runs where family_id = $1 and week = $2`,
+    [req.user.family_id, week]
+  );
+  const pay = await pool.query(`select member_id, amount, paid_at from payouts where family_id = $1 and week = $2`, [req.user.family_id, week]);
+  res.json({
+    week, currentWeek: currentWeek(), settings,
+    chores: chores.sort((a, b) => (a.created || 0) - (b.created || 0)),
+    runs: runs.rows.map((r) => ({ choreId: r.chore_id, memberId: r.member_id, status: r.status, claimedAt: r.claimed_at, doneAt: r.done_at, photoId: r.photo_id, reviewedAt: r.reviewed_at, comment: r.comment,
+      expiresAt: r.status === "claimed" && r.claimed_at ? new Date(new Date(r.claimed_at).getTime() + settings.claimHours * 3600e3) : null })),
+    payouts: pay.rows.map((p) => ({ memberId: p.member_id, amount: p.amount, paidAt: p.paid_at })),
+  });
+}));
+
+app.put("/api/chores/:id", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const id = clean(req.params.id, 60);
+  const ex = await pool.query(`select data from chores where family_id = $1 and id = $2`, [req.user.family_id, id]);
+  const data = cleanChore(req.body || {}, ex.rows[0] && ex.rows[0].data);
+  if (!id || !data.title) return res.status(400).json({ error: "Oppgaven må ha et navn." });
+  if (data.kind === "fixed" && !data.assignee) return res.status(400).json({ error: "Velg hvem den faste oppgaven gjelder." });
+  await pool.query(
+    `insert into chores (id, family_id, data, updated_at) values ($1, $2, $3, now())
+     on conflict (family_id, id) do update set data = excluded.data, updated_at = now()`,
+    [id, req.user.family_id, JSON.stringify(data)]
+  );
+  res.json({ ok: true });
+}));
+
+// Slett: avsluttes etter forrige uke, så tidligere uker og oppgjør beholdes
+app.delete("/api/chores/:id", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const id = clean(req.params.id, 60);
+  const ex = await pool.query(`select data from chores where family_id = $1 and id = $2`, [req.user.family_id, id]);
+  if (!ex.rows[0]) return res.json({ ok: true });
+  const cw = currentWeek(); const d = ex.rows[0].data;
+  const used = await pool.query(`select 1 from chore_runs where family_id = $1 and chore_id = $2 limit 1`, [req.user.family_id, id]);
+  if (!used.rows[0] || d.fromWeek >= cw) {
+    await pool.query(`delete from chores where family_id = $1 and id = $2`, [req.user.family_id, id]);
+    await pool.query(`delete from chore_runs where family_id = $1 and chore_id = $2 and week >= $3`, [req.user.family_id, id, cw]);
+  } else {
+    const prev = weekKeyOf(new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10));
+    d.archivedAfter = prev; if (d.repeat === "once") d.archivedAfter = d.fromWeek;
+    await pool.query(`update chores set data = $3 where family_id = $1 and id = $2`, [req.user.family_id, id, JSON.stringify(d)]);
+    await pool.query(`delete from chore_runs where family_id = $1 and chore_id = $2 and week >= $3 and status <> 'approved'`, [req.user.family_id, id, cw]);
+  }
+  res.json({ ok: true });
+}));
+
+async function loadChore(req, res) {
+  const id = clean(req.params.id, 60);
+  const week = validWeek(req.body && req.body.week) ? req.body.week : currentWeek();
+  const ex = await pool.query(`select data from chores where family_id = $1 and id = $2`, [req.user.family_id, id]);
+  if (!ex.rows[0] || !choreActive(ex.rows[0].data, week)) { res.status(404).json({ error: "Fant ikke oppgaven denne uken." }); return null; }
+  const run = await pool.query(`select * from chore_runs where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, id, week]);
+  return { id, week, chore: ex.rows[0].data, run: run.rows[0] || null };
+}
+async function memberOk(familyId, memberId) {
+  const f = await pool.query(`select members from families where id = $1`, [familyId]);
+  return (f.rows[0].members || []).some((m) => m.id === memberId);
+}
+// Barn handler alltid som seg selv. Foreldre (f.eks. på tavla) kan velge barn.
+function actingMember(req) {
+  if (req.user.kind === "child") return req.user.member_id;
+  return clean(String((req.body && req.body.memberId) || ""), 40) || req.user.member_id;
+}
+
+app.post("/api/chores/:id/claim", wrap(auth), wrap(async (req, res) => {
+  const c = await loadChore(req, res); if (!c) return;
+  if (c.chore.kind !== "pool") return res.status(400).json({ error: "Bare oppgaver i børsen kan reserveres." });
+  const mid = actingMember(req);
+  if (!mid || !(await memberOk(req.user.family_id, mid))) return res.status(400).json({ error: "Velg hvem som tar oppgaven." });
+  const st = await choreSettings(req.user.family_id);
+  await releaseExpiredClaims(req.user.family_id, st.claimHours);
+  if (c.run) return res.status(409).json({ error: c.run.member_id === mid ? "Du har allerede denne." : "Noen andre var først." });
+  const open = await pool.query(`select count(*)::int n from chore_runs where family_id = $1 and member_id = $2 and status = 'claimed'`, [req.user.family_id, mid]);
+  if (open.rows[0].n >= st.maxOpenClaims) return res.status(409).json({ error: `Gjør ferdig det du har tatt først (maks ${st.maxOpenClaims} om gangen).` });
+  try {
+    await pool.query(`insert into chore_runs (family_id, chore_id, week, member_id, status, claimed_at) values ($1, $2, $3, $4, 'claimed', now())`, [req.user.family_id, c.id, c.week, mid]);
+  } catch { return res.status(409).json({ error: "Noen andre var først." }); }
+  res.json({ ok: true });
+}));
+
+app.post("/api/chores/:id/release", wrap(auth), wrap(async (req, res) => {
+  const c = await loadChore(req, res); if (!c) return;
+  if (!c.run || c.run.status !== "claimed") return res.json({ ok: true });
+  if (req.user.kind === "child" && c.run.member_id !== req.user.member_id) return res.status(403).json({ error: "Det er ikke din oppgave." });
+  await pool.query(`delete from chore_runs where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, c.id, c.week]);
+  res.json({ ok: true });
+}));
+
+app.post("/api/chores/:id/done", wrap(auth), wrap(async (req, res) => {
+  const c = await loadChore(req, res); if (!c) return;
+  let mid = actingMember(req);
+  if (c.chore.kind === "fixed") {
+    if (req.user.kind === "child" && c.chore.assignee !== req.user.member_id) return res.status(403).json({ error: "Dette er ikke din oppgave." });
+    mid = c.chore.assignee;
+  } else if (c.run && c.run.member_id !== mid) {
+    if (req.user.kind === "child") return res.status(409).json({ error: "Noen andre har tatt denne." });
+    mid = c.run.member_id;
+  }
+  if (c.run && (c.run.status === "pending" || c.run.status === "approved")) return res.status(409).json({ error: c.run.status === "approved" ? "Oppgaven er allerede godkjent." : "Oppgaven venter allerede på godkjenning." });
+  let photoId = null;
+  const img = req.body && req.body.photo;
+  if (typeof img === "string" && img.length) {
+    if (img.length > 3_000_000) return res.status(400).json({ error: "Bildet er for stort." });
+    const buf = Buffer.from(img, "base64");
+    if (buf[0] !== 0xff || buf[1] !== 0xd8) return res.status(400).json({ error: "Bildet må være JPEG." });
+    const ph = await pool.query(`insert into photos (family_id, data) values ($1, $2) returning id`, [req.user.family_id, buf]);
+    photoId = ph.rows[0].id;
+  } else if (c.chore.photo) {
+    return res.status(400).json({ error: "Ta et bilde som viser at oppgaven er gjort." });
+  }
+  if (c.run && c.run.photo_id) await pool.query(`delete from photos where id = $1`, [c.run.photo_id]);
+  await pool.query(
+    `insert into chore_runs (family_id, chore_id, week, member_id, status, claimed_at, done_at, photo_id)
+     values ($1, $2, $3, $4, 'pending', now(), now(), $5)
+     on conflict (family_id, chore_id, week) do update set member_id = excluded.member_id, status = 'pending', done_at = now(), photo_id = excluded.photo_id, comment = null, reviewed_at = null, reviewed_by = null`,
+    [req.user.family_id, c.id, c.week, mid, photoId]
+  );
+  res.json({ ok: true });
+}));
+
+app.post("/api/chores/:id/review", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const c = await loadChore(req, res); if (!c) return;
+  if (!c.run || c.run.status === "claimed") return res.status(400).json({ error: "Oppgaven er ikke meldt ferdig." });
+  const approve = !!req.body.approve;
+  await pool.query(
+    `update chore_runs set status = $4, reviewed_by = $5, reviewed_at = now(), comment = $6 where family_id = $1 and chore_id = $2 and week = $3`,
+    [req.user.family_id, c.id, c.week, approve ? "approved" : "rejected", req.user.id, clean(req.body.comment, 200) || null]
+  );
+  res.json({ ok: true });
+}));
+
+app.get("/api/photos/:id", wrap(auth), wrap(async (req, res) => {
+  const id = clean(req.params.id, 40);
+  if (!/^[0-9a-f-]{36}$/.test(id)) return res.status(404).end();
+  const r = await pool.query(`select data from photos where id = $1 and family_id = $2`, [id, req.user.family_id]);
+  if (!r.rows[0]) return res.status(404).end();
+  res.setHeader("Content-Type", "image/jpeg");
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.send(r.rows[0].data);
+}));
+
+app.put("/api/chore-settings", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const b = req.body || {};
+  const allowance = {};
+  for (const [k, v] of Object.entries(b.allowance || {})) {
+    const amount = Math.max(0, Math.min(10000, parseInt(v && v.amount, 10) || 0));
+    if (amount) allowance[clean(k, 40)] = { amount, mode: v.mode === "share" ? "share" : "all" };
+  }
+  const st = {
+    maxOpenClaims: Math.max(1, Math.min(10, parseInt(b.maxOpenClaims, 10) || 2)),
+    claimHours: Math.max(1, Math.min(168, parseInt(b.claimHours, 10) || 24)),
+    allowance,
+  };
+  await pool.query(`update families set settings = jsonb_set(coalesce(settings, '{}'), '{chores}', $2::jsonb) where id = $1`, [req.user.family_id, JSON.stringify(st)]);
+  res.json({ ok: true, settings: st });
+}));
+
+app.post("/api/payouts", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const week = validWeek(req.body.week) ? req.body.week : null;
+  const mid = clean(String(req.body.memberId || ""), 40);
+  if (!week || !mid) return res.status(400).json({ error: "Ugyldig utbetaling." });
+  if (req.body.paid === false) {
+    await pool.query(`delete from payouts where family_id = $1 and member_id = $2 and week = $3`, [req.user.family_id, mid, week]);
+  } else {
+    const amount = Math.max(0, Math.min(100000, parseInt(req.body.amount, 10) || 0));
+    await pool.query(
+      `insert into payouts (family_id, member_id, week, amount, paid_by) values ($1, $2, $3, $4, $5)
+       on conflict (family_id, member_id, week) do update set amount = excluded.amount, paid_by = excluded.paid_by, paid_at = now()`,
+      [req.user.family_id, mid, week, amount, req.user.id]
+    );
+  }
+  res.json({ ok: true });
+}));
+
 // ---------- Kalenderabonnement (iCal/ICS), f.eks. Spond via Google- eller iCloud-kalender ----------
 const FEED_PAST_DAYS = 14, FEED_FUTURE_DAYS = 120, FEED_MAX_EVENTS = 1500;
 const osloFmt = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -672,7 +958,7 @@ app.use((err, req, res, next) => {
 
 // Expired sessions/invites are cleaned up hourly
 setInterval(() => {
-  pool.query(`delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD')`).catch(() => {});
+  pool.query(`delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); update chore_runs set photo_id = null where photo_id in (select id from photos where created_at < now() - interval '30 days'); delete from photos where created_at < now() - interval '30 days'`).catch(() => {});
 }, 3600e3);
 
 migrate()
