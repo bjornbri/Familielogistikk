@@ -20,6 +20,12 @@ services:
         sync: false   # valgfri: slår på lesing av avtaler fra bilder
       - key: GOOGLE_MAPS_API_KEY
         sync: false   # valgfri: slår på stedssøk med Google Maps
+      - key: ADMIN_EMAILS
+        sync: false   # din e-post: gir tilgang til /admin (bruksstatistikk)
+      - key: RESEND_API_KEY
+        sync: false   # e-post for «Glemt passord» (resend.com)
+      - key: MAIL_FROM
+        value: "Familielogistikk <noreply@familielogistikk.no>"
 
 databases:
   - name: familielogistikk-db

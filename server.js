@@ -18,6 +18,9 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "";
 const SESSION_DAYS = 60;
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const MAIL_FROM = process.env.MAIL_FROM || "Familielogistikk <noreply@familielogistikk.no>";
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 const INVITE_DAYS = 7;
 
 if (!DATABASE_URL) {
@@ -116,6 +119,19 @@ async function migrate() {
       paid_by uuid references users(id) on delete set null,
       paid_at timestamptz not null default now(),
       primary key (family_id, member_id, week)
+    );
+    create table if not exists password_resets (
+      token_hash text primary key,
+      user_id uuid not null references users(id) on delete cascade,
+      expires_at timestamptz not null,
+      used_at timestamptz
+    );
+    create table if not exists activity (
+      user_id uuid not null references users(id) on delete cascade,
+      family_id uuid not null references families(id) on delete cascade,
+      day date not null,
+      opens int not null default 1,
+      primary key (user_id, day)
     );
     create table if not exists confirmations (
       family_id uuid not null references families(id) on delete cascade,
@@ -325,7 +341,110 @@ app.post("/api/logout", wrap(async (req, res) => {
 }));
 
 app.get("/api/me", wrap(auth), wrap(async (req, res) => {
-  res.json(await familyPayload(req.user));
+  // Anonym bruksstatistikk: bare at kontoen var aktiv denne dagen (norsk tid), ikke hva som ble gjort
+  pool.query(
+    `insert into activity (user_id, family_id, day) values ($1, $2, (now() at time zone 'Europe/Oslo')::date)
+     on conflict (user_id, day) do update set opens = activity.opens + 1`,
+    [req.user.id, req.user.family_id]
+  ).catch(() => {});
+  const out = await familyPayload(req.user);
+  out.user.isAdmin = ADMIN_EMAILS.includes(String(req.user.email).toLowerCase());
+  res.json(out);
+}));
+
+// ---------- Glemt passord ----------
+async function sendMail(to, subject, text, html) {
+  if (!RESEND_API_KEY) { console.log(`[e-post ikke satt opp] Til ${to}: ${subject}\n${text}`); return false; }
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: MAIL_FROM, to: [to], subject, text, html }),
+  });
+  if (!r.ok) { console.error("E-post feilet", r.status, (await r.text()).slice(0, 300)); return false; }
+  return true;
+}
+app.post("/api/password/forgot", throttle(5, 15 * 60e3), wrap(async (req, res) => {
+  const email = clean(req.body.email, 200).toLowerCase();
+  const generic = { ok: true, message: "Hvis det finnes en konto med denne e-posten, har vi sendt en lenke for å lage nytt passord. Sjekk også søppelpost." };
+  if (!validEmail(email)) return res.status(400).json({ error: "E-postadressen ser ikke riktig ut." });
+  const { rows } = await pool.query(`select id, name from users where lower(email) = $1`, [email]);
+  if (!rows[0]) return res.json(generic);
+  // Maks 3 aktive lenker per konto
+  const recent = await pool.query(`select count(*)::int n from password_resets where user_id = $1 and expires_at > now() and used_at is null`, [rows[0].id]);
+  if (recent.rows[0].n >= 3) return res.json(generic);
+  const t = token();
+  await pool.query(`insert into password_resets (token_hash, user_id, expires_at) values ($1, $2, now() + interval '1 hour')`, [sha(t), rows[0].id]);
+  const base = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`;
+  const link = `${base}/?reset=${t}`;
+  const first = String(rows[0].name).split(/\s+/)[0];
+  const text = `Hei ${first}!\n\nNoen (forhåpentligvis du) ba om å lage nytt passord til Familielogistikk.\n\nÅpne denne lenken innen 1 time:\n${link}\n\nHar du ikke bedt om dette, kan du se bort fra e-posten. Passordet ditt er ikke endret.\n\nHilsen Familielogistikk`;
+  const html = `<p>Hei ${first.replace(/[<>&]/g, "")}!</p><p>Noen (forhåpentligvis du) ba om å lage nytt passord til Familielogistikk.</p><p><a href="${link}" style="display:inline-block;background:#16302B;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Lag nytt passord</a></p><p>Lenken virker i 1 time. Har du ikke bedt om dette, kan du se bort fra e-posten. Passordet ditt er ikke endret.</p><p>Hilsen Familielogistikk</p>`;
+  await sendMail(email, "Lag nytt passord til Familielogistikk", text, html);
+  res.json(generic);
+}));
+app.get("/api/password/reset/:token", wrap(async (req, res) => {
+  const { rows } = await pool.query(
+    `select u.email from password_resets r join users u on u.id = r.user_id where r.token_hash = $1 and r.expires_at > now() and r.used_at is null`,
+    [sha(clean(req.params.token, 100))]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Lenken er brukt eller utløpt. Be om en ny." });
+  res.json({ email: rows[0].email });
+}));
+app.post("/api/password/reset", throttle(10, 15 * 60e3), wrap(async (req, res) => {
+  const t = clean(req.body.token, 100);
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+  if (password.length < 8) return res.status(400).json({ error: "Passordet må ha minst 8 tegn." });
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const { rows } = await client.query(
+      `select user_id from password_resets where token_hash = $1 and expires_at > now() and used_at is null for update`, [sha(t)]
+    );
+    if (!rows[0]) { await client.query("rollback"); return res.status(400).json({ error: "Lenken er brukt eller utløpt. Be om en ny." }); }
+    const uid = rows[0].user_id;
+    await client.query(`update users set password_hash = $1 where id = $2`, [await bcrypt.hash(password, 11), uid]);
+    await client.query(`update password_resets set used_at = now() where user_id = $1 and used_at is null`, [uid]);
+    await client.query(`delete from sessions where user_id = $1`, [uid]); // logg ut alle andre steder
+    await client.query("commit");
+    await createSession(res, uid);
+    res.json({ ok: true });
+  } catch (e) { await client.query("rollback").catch(() => {}); throw e; } finally { client.release(); }
+}));
+
+// ---------- Bruksstatistikk (kun for ADMIN_EMAILS, bare tall) ----------
+app.get("/api/admin/stats", wrap(auth), wrap(async (req, res) => {
+  if (!ADMIN_EMAILS.includes(String(req.user.email).toLowerCase())) return res.status(403).json({ error: "Ingen tilgang." });
+  const q = async (sql, args = []) => (await pool.query(sql, args)).rows;
+  const today = `(now() at time zone 'Europe/Oslo')::date`;
+  const [totals] = await q(`select
+      (select count(*)::int from families) families,
+      (select count(*)::int from users) accounts,
+      (select count(*)::int from users where kind = 'child') child_accounts,
+      (select count(*)::int from families where created_at > now() - interval '7 days') new_families_7d`);
+  const daily = await q(`select to_char(d::date, 'YYYY-MM-DD') as day,
+      (select count(distinct family_id)::int from activity a where a.day = d::date) families,
+      (select count(distinct user_id)::int from activity a where a.day = d::date) users
+    from generate_series(${today} - 29, ${today}, interval '1 day') d order by d`);
+  const [act] = await q(`select
+      (select count(distinct family_id)::int from activity where day > ${today} - 7) wau_families,
+      (select count(distinct family_id)::int from activity where day > ${today} - 30) mau_families,
+      (select count(*)::int from (select family_id from activity where day > ${today} - 7 group by family_id having count(distinct day) >= 4) x) engaged_families,
+      (select count(*)::int from (select family_id from activity where day > ${today} - 7 group by family_id having count(distinct user_id) >= 2) x) multi_user_families`);
+  const [feat] = await q(`select
+      (select count(*)::int from events where updated_at > now() - interval '7 days' and id not like 'f\_%') events_7d,
+      (select count(*)::int from notes where updated_at > now() - interval '7 days') notes_7d,
+      (select count(*)::int from confirmations where created_at > now() - interval '7 days') confirmations_7d,
+      (select count(*)::int from chore_runs where done_at > now() - interval '7 days') chores_done_7d,
+      (select count(*)::int from chores) chores_total,
+      (select count(*)::int from feeds) feeds_total,
+      (select count(distinct family_id)::int from feeds) families_with_feeds,
+      (select count(distinct family_id)::int from chores) families_with_chores`);
+  const families = await q(`select substr(md5(f.id::text), 1, 6) as ref, to_char(f.created_at at time zone 'Europe/Oslo', 'YYYY-MM-DD') as created,
+      (select count(*)::int from users u where u.family_id = f.id) accounts,
+      (select count(distinct day)::int from activity a where a.family_id = f.id and a.day > ${today} - 7) days_7d,
+      (select to_char(max(day), 'YYYY-MM-DD') from activity a where a.family_id = f.id) last_seen
+    from families f order by days_7d desc, created desc limit 200`);
+  res.json({ totals, active: act, features: feat, daily, families });
 }));
 
 const parentOnly = (req, res, next) => (req.user.kind === "child" ? res.status(403).json({ error: "Bare foreldre kan gjøre dette." }) : next());
@@ -958,7 +1077,7 @@ app.use((err, req, res, next) => {
 
 // Expired sessions/invites are cleaned up hourly
 setInterval(() => {
-  pool.query(`delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); update chore_runs set photo_id = null where photo_id in (select id from photos where created_at < now() - interval '30 days'); delete from photos where created_at < now() - interval '30 days'`).catch(() => {});
+  pool.query(`delete from password_resets where expires_at < now() - interval '1 day'; delete from activity where day < now() - interval '400 days'; delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); update chore_runs set photo_id = null where photo_id in (select id from photos where created_at < now() - interval '30 days'); delete from photos where created_at < now() - interval '30 days'`).catch(() => {});
 }, 3600e3);
 
 migrate()

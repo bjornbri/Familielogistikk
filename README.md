@@ -34,6 +34,17 @@ Merk om gratisplanene hos Render:
 - Webtjenesten sover etter en stund uten trafikk. Første besøk etter det kan ta opptil et minutt.
 - Gratis Postgres er tidsbegrenset. Bytt til en betalt databaseplan før dere legger inn data dere vil beholde.
 
+## Bruksstatistikk
+
+Åpne `/admin` (eller **Familie → Bruksstatistikk**) når e-posten din står i `ADMIN_EMAILS`.
+Siden viser hvor stor andel av de aktive familiene som bruker appen 4 dager eller mer i uka, aktive per dag, hvilke funksjoner som brukes, og en anonym liste over familiene. Den lagrer bare hvilke dager en konto åpnet appen, aldri innhold.
+
+## «Glemt passord»
+
+Brukeren får en lenke på e-post som virker i 1 time og én gang. Nytt passord logger ut alle andre enheter.
+Krever en konto hos [Resend](https://resend.com) (gratisnivå holder) med domenet verifisert, og `RESEND_API_KEY` og `MAIL_FROM` i Render.
+Uten nøkkel skrives lenken bare i serverloggen.
+
 ## Google Maps-nøkkel (stedssøk)
 
 1. Gå til console.cloud.google.com, lag et prosjekt og legg inn betalingskonto.

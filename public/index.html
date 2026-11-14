@@ -442,15 +442,19 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
     <p class="lead" id="auth-lead">Hele familiens avtaler på ett sted.</p>
     <div class="invite-note" id="invite-note" hidden></div>
     <div class="auth-box">
-      <div class="auth-tabs" role="group">
+      <h2 id="auth-h" hidden style="margin:0;font-family:var(--f-display);font-size:1.2rem"></h2>
+      <div class="auth-tabs" id="auth-tabs" role="group">
         <button type="button" id="auth-tab-login" aria-pressed="true">Logg inn</button>
         <button type="button" id="auth-tab-reg" aria-pressed="false">Opprett konto</button>
       </div>
       <label class="f" id="auth-name-row" hidden>Navn<input id="auth-name" autocomplete="name" placeholder="Fornavn Etternavn"></label>
-      <label class="f">E-post<input id="auth-email" type="email" autocomplete="email" inputmode="email" required></label>
-      <label class="f">Passord<input id="auth-pass" type="password" autocomplete="current-password" minlength="8" required></label>
+      <label class="f" id="auth-email-row">E-post<input id="auth-email" type="email" autocomplete="email" inputmode="email" required></label>
+      <label class="f" id="auth-pass-row"><span id="auth-pass-label">Passord</span><input id="auth-pass" type="password" autocomplete="current-password" minlength="8" required></label>
       <p class="auth-err" id="auth-err" hidden></p>
+      <p id="auth-info" hidden style="margin:0;font-size:.92rem;background:color-mix(in srgb,var(--ok) 12%,var(--surface));border:1px solid var(--ok);border-radius:10px;padding:10px 12px"></p>
       <button class="btn primary" type="submit" id="auth-go">Logg inn</button>
+      <button type="button" class="fold" id="auth-forgot" style="align-self:center">Glemt passord?</button>
+      <button type="button" class="fold" id="auth-back" hidden style="align-self:center">← Tilbake til innlogging</button>
     </div>
   </form>
 </section>
@@ -667,6 +671,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
       <div class="acct">
         <h3>Kontoer i familien</h3>
         <ul id="acct-list"></ul>
+        <a href="/admin" id="admin-link" class="btn" hidden style="align-self:flex-start;text-decoration:none">Bruksstatistikk</a>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span id="acct-me" style="font-size:.88rem;color:var(--muted)"></span><button type="button" class="btn danger" id="logout">Logg ut</button></div>
       </div>
     </div>
@@ -794,9 +799,24 @@ function strip(e){const o={...e};delete o.id;return o}
 
 // ---------- innlogging ----------
 const inviteToken=new URLSearchParams(location.search).get("invite");
-let authMode=inviteToken?"reg":"login";
+const resetToken=new URLSearchParams(location.search).get("reset");
+let authMode=resetToken?"reset":inviteToken?"reg":"login";
 function setAuthMode(m){
   authMode=m;
+  const special=m==="forgot"||m==="reset";
+  $("#auth-tabs").hidden=special; $("#auth-h").hidden=!special;
+  $("#auth-h").textContent=m==="forgot"?"Glemt passord":"Lag nytt passord";
+  $("#auth-pass-row").hidden=m==="forgot";
+  $("#auth-email").readOnly=m==="reset";
+  $("#auth-pass-label").textContent=m==="reset"?"Nytt passord":"Passord";
+  $("#auth-forgot").hidden=m!=="login"; $("#auth-back").hidden=!special;
+  $("#auth-info").hidden=true;
+  if(special){
+    $("#auth-name-row").hidden=true;
+    $("#auth-pass").autocomplete="new-password"; $("#auth-pass").placeholder="Minst 8 tegn";
+    $("#auth-go").textContent=m==="forgot"?"Send lenke på e-post":"Lagre nytt passord";
+    $("#auth-err").hidden=true; return;
+  }
   $("#auth-tab-login").setAttribute("aria-pressed",String(m==="login"));
   $("#auth-tab-reg").setAttribute("aria-pressed",String(m==="reg"));
   $("#auth-name-row").hidden=m!=="reg";
@@ -815,15 +835,30 @@ async function showAuth(){
     catch(e){ $("#invite-note").textContent="Invitasjonslenken er brukt eller utløpt. Be om en ny, eller opprett din egen familie."; }
     $("#invite-note").hidden=false;
   }
+  if(resetToken&&authMode==="reset"){
+    try{ const j=await api("/api/password/reset/"+encodeURIComponent(resetToken),{noAuthRedirect:true}); $("#auth-email").value=j.email; }
+    catch(e){ setAuthMode("forgot"); const er=$("#auth-err"); er.textContent=e.error; er.hidden=false; return; }
+  }
   setAuthMode(authMode);
 }
 function hideAuth(){ document.body.classList.remove("authing"); $("#auth").hidden=true; }
 $("#auth-tab-login").addEventListener("click",()=>setAuthMode("login"));
 $("#auth-tab-reg").addEventListener("click",()=>setAuthMode("reg"));
+$("#auth-forgot").addEventListener("click",()=>setAuthMode("forgot"));
+$("#auth-back").addEventListener("click",()=>{ if(resetToken) history.replaceState(null,"",location.pathname+location.hash); $("#auth-email").readOnly=false; setAuthMode("login"); });
 $("#auth-form").addEventListener("submit",async ev=>{
   ev.preventDefault();
   const err=$("#auth-err"); err.hidden=true;
   const body={email:$("#auth-email").value.trim(),password:$("#auth-pass").value};
+  if(authMode==="forgot"||authMode==="reset"){
+    const go=$("#auth-go"); go.disabled=true;
+    try{
+      if(authMode==="forgot"){ const j=await api("/api/password/forgot",{method:"POST",body:{email:body.email},noAuthRedirect:true}); const inf=$("#auth-info"); inf.textContent=j.message; inf.hidden=false; }
+      else { await api("/api/password/reset",{method:"POST",body:{token:resetToken,password:body.password},noAuthRedirect:true}); history.replaceState(null,"",location.pathname+location.hash); $("#auth-pass").value=""; authMode="login"; await init(); toast("Nytt passord er lagret. Du er logget inn."); }
+    }catch(e){ err.textContent=e.error; err.hidden=false; }
+    finally{ go.disabled=false; }
+    return;
+  }
   if(authMode==="reg"){ body.name=$("#auth-name").value.trim(); if(inviteToken) body.invite=inviteToken; }
   const go=$("#auth-go"); go.disabled=true;
   try{
@@ -1622,6 +1657,7 @@ function drawAcct(){
   const child=me.user.kind==="child";
   $("#inv-make").parentElement.parentElement.hidden=child; $("#fam-add").hidden=child; $("#fam-save").hidden=child; $("#feeds-sec").hidden=child;
   $("#acct-me").textContent="Innlogget som "+me.user.email;
+  $("#admin-link").hidden=!me.user.isAdmin;
 }
 // ---------- kalenderabonnement ----------
 let feeds=[], feedWho=[];
