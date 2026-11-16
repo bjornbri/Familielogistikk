@@ -317,6 +317,40 @@ details.ch-set summary{cursor:pointer;font-weight:700}
 .bd-pool{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .bd-pool > b{font-family:var(--f-display);margin-right:4px}
 
+/* Henting: faste tider fra skole og barnehage, bare «Jeg henter» kan trykkes */
+.pks{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.pk{display:grid;grid-template-columns:3.4rem minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.pk:first-child{border-top:0}
+.pk .t{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:.95rem}
+.pk .pb{min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.pk .pb b{display:flex;align-items:center;gap:6px;font-size:1rem}
+.pk .pb b i{width:10px;height:10px;border-radius:50%;background:var(--pc);flex:none}
+.pk .pb span{font-size:.8rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk.open{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
+.pk.late{background:color-mix(in srgb,var(--danger) 9%,var(--surface))}
+.pk.late .pb span.warn{color:var(--danger);font-weight:700}
+.pk.past{opacity:.5}
+.sec-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.sec-row .fold{padding:0}
+.wpk{display:flex;flex-direction:column;gap:3px;border:1px dashed var(--line);border-radius:6px;padding:5px 6px;font-size:.76rem}
+.wpk > span{font-family:var(--f-mono);color:var(--muted)}
+.wpk > span b{font-family:var(--f-body);color:var(--ink)}
+.wpk .conf{min-height:26px;padding:2px 8px;font-size:.72rem;align-self:flex-start}
+.wpk .conf .ck{width:14px;height:14px;font-size:.6rem}
+.bd-pks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
+.bd-pks .pk{border:1px solid var(--line);border-radius:12px;font-size:clamp(1rem,1.6vw,1.2rem);grid-template-columns:4.8rem minmax(0,1fr) auto}
+.bd-pks .pk .t{font-size:clamp(1.05rem,1.8vw,1.35rem)}
+.bd-pks .pk .pb b{font-size:clamp(1.05rem,1.8vw,1.3rem)}
+.pkedit{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg)}
+.pkedit .top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px}
+.pkedit select,.pkedit input{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:7px 9px;color:var(--ink);font-size:.92rem;min-width:0;width:100%}
+.pkedit .days{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.pkedit .days label{display:flex;flex-direction:column;gap:2px;font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.pkedit .days input{padding:6px 4px;font-family:var(--f-mono);font-size:.85rem}
+.pkedit .fill{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:.82rem;color:var(--muted)}
+.pkedit .fill input{width:auto}
+@media (max-width:480px){.pkedit .days{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
 /* Bottom bar on phones: navigation and the two add buttons within thumb reach */
 .bottombar{display:none}
 @media (max-width:640px){
@@ -642,6 +676,22 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
   </div>
 </dialog>
 
+<dialog id="dlg-pickups">
+  <div class="dlg">
+    <header><h2>Faste hentetider</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body">
+      <p style="margin:0;font-size:.88rem;color:var(--muted)">Legg inn når skolen slutter, SFO eller barnehagen stenger. Tidene vises på I dag, tavla og i uka, og den som henter trykker «Jeg henter». La en dag stå tom hvis ingen skal hentes.</p>
+      <div id="pk-list-edit" style="display:flex;flex-direction:column;gap:10px"></div>
+      <div><button type="button" class="btn" id="pk-add">+ Legg til hentetid</button></div>
+      <p class="auth-err" id="pk-err" hidden></p>
+    </div>
+    <footer>
+      <button type="button" class="btn" data-close>Avbryt</button>
+      <button type="button" class="btn primary" id="pk-save">Lagre</button>
+    </footer>
+  </div>
+</dialog>
+
 <dialog id="dlg-family">
   <div class="dlg">
     <header><h2>Familie og konto</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
@@ -671,6 +721,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
       <div class="acct">
         <h3>Kontoer i familien</h3>
         <ul id="acct-list"></ul>
+        <button type="button" class="btn" id="open-pickups" style="align-self:flex-start">Faste hentetider (skole og barnehage)</button>
         <a href="/admin" id="admin-link" class="btn" hidden style="align-self:flex-start;text-decoration:none">Bruksstatistikk</a>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span id="acct-me" style="font-size:.88rem;color:var(--muted)"></span><button type="button" class="btn danger" id="logout">Logg ut</button></div>
       </div>
@@ -757,6 +808,7 @@ async function api(path,opts={}){
 }
 function applyMe(me){
   S.me=me; imgEnabled=!!me.imageReading; placesEnabled=!!me.placesSearch;
+  S.pickups=(me.family.settings&&me.family.settings.pickups)||[];
   if(Array.isArray(me.family.members)&&me.family.members.length) S.members=me.family.members;
   $("#img-zone").hidden=false; $("#img-or").hidden=false;
 }
@@ -1085,11 +1137,88 @@ async function toggleConf(btn){
     catch(e){ S.confs[key]=prev; render(); if(e.status!==401) toast(e.error); }
   } else {
     S.confs[key]={eventId:id,date:ds,userId:S.me.user.id,name:S.me.user.name}; render();
-    try{ await api("/api/confirmations",{method:"POST",body:{eventId:id,date:ds}}); const ev=S.events.find(x=>x.id===id); toast(`Bekreftet: du tar ${ev?ev.title:"avtalen"}`); }
+    try{ await api("/api/confirmations",{method:"POST",body:{eventId:id,date:ds}}); if(id.startsWith("p_")){ const pk=(S.pickups||[]).find(p=>"p_"+p.id===id); const m=pk&&member(pk.memberId); toast(`Bekreftet: du henter ${m?m.name:"barnet"}`); } else { const ev=S.events.find(x=>x.id===id); toast(`Bekreftet: du tar ${ev?ev.title:"avtalen"}`); } }
     catch(e){ if(prev) S.confs[key]=prev; else delete S.confs[key]; render(); if(e.status!==401) toast(e.error); }
   }
   if(dEv.open && S.editing && S.editing.id===id) drawEvConf();
 }
+// ---------- henting ----------
+const PICK_KIND={skole:"Skolen slutter",sfo:"SFO stenger",barnehage:"Barnehagen stenger",annet:"Henting"};
+function pickupsOn(d){
+  const wd=d.getDay()||7;
+  return (S.pickups||[]).filter(p=>p.times&&p.times[wd]).map(p=>{ const m=member(p.memberId);
+    return {id:"p_"+p.id,memberId:p.memberId,m,kind:p.kind,place:p.place||"",time:p.times[wd],title:(m?m.name:"Barn")+": "+(PICK_KIND[p.kind]||"Henting")}; })
+    .filter(p=>!S.hidden.has(p.memberId)).sort((a,b)=>a.time.localeCompare(b.time));
+}
+function pickBtn(pk,ds){
+  const c=confOf(pk,ds), mine=c&&S.me&&c.userId===S.me.user.id;
+  if(S.readOnly) return c?`<span class="cfline">✓ ${esc(mine?"Du henter":confName(c)+" henter")}</span>`:"";
+  const label=c?(mine?"Du henter":confName(c)+" henter"):"Jeg henter";
+  const aria=c?`${label} ${pk.m?pk.m.name:""}. Trykk for å ${mine?"angre":"ta over"}`:`Bekreft at du henter ${pk.m?pk.m.name:""} kl ${pk.time}`;
+  return `<button class="conf ${c?"on":""}" data-conf="${esc(pk.id)}" data-d="${ds}" aria-label="${esc(aria)}" aria-pressed="${!!c}"><span class="ck" aria-hidden="true">✓</span>${esc(label)}</button>`;
+}
+function pickRow(pk,d){
+  const ds=iso(d), c=confOf(pk,ds), isT=ds===iso(today());
+  const now=new Date(), nm=now.getHours()*60+now.getMinutes(), tm=toMin(pk.time);
+  let cls="", warn="";
+  if(isT&&!c){ if(nm>=tm-90&&nm<tm+30){ cls="late"; warn="Ingen har bekreftet ennå"; } else if(nm<tm) cls="open"; }
+  if(isT&&nm>=tm+30) cls="past";
+  const sub=[PICK_KIND[pk.kind]||"Henting",pk.place].filter(Boolean).join(" · ");
+  return `<div class="pk ${cls}" style="--pc:${pk.m?`var(--m${pk.m.c})`:"var(--muted)"}"><span class="t">${esc(pk.time)}</span><span class="pb"><b><i></i>${esc(pk.m?pk.m.name:"Barn")}</b><span>${esc(sub)}</span>${warn?`<span class="warn">${esc(warn)}</span>`:""}</span>${pickBtn(pk,ds)}</div>`;
+}
+function pickupsBlock(d){
+  const list=pickupsOn(d);
+  if(!list.length){
+    if(isParent()&&!(S.pickups||[]).length&&!S.readOnly&&iso(d)===iso(today())) return `<button class="addmsg" data-act="pickups">+ Legg inn faste hentetider for skole og barnehage</button>`;
+    return "";
+  }
+  return `<div class="sec-row"><h2 class="sec-h">Henting</h2>${isParent()&&!S.readOnly?`<button class="fold" data-act="pickups">Endre tider</button>`:""}</div><div class="pks">${list.map(pk=>pickRow(pk,d)).join("")}</div>`;
+}
+function pickupsBoard(d){
+  const list=pickupsOn(d); if(!list.length) return "";
+  return `<section class="bd-tmsec" style="border-top:0;padding-top:0"><h2>Hvem henter i dag</h2><div class="bd-pks">${list.map(pk=>pickRow(pk,d)).join("")}</div></section>`;
+}
+function pickupsWeek(d){
+  const ds=iso(d);
+  return pickupsOn(d).map(pk=>`<div class="wpk"><span>${esc(pk.time)} <b>${esc(pk.m?pk.m.name:"Barn")}</b></span>${pickBtn(pk,ds)}</div>`).join("");
+}
+// Oppsett (foreldre)
+let pkDraft=[];
+function openPickups(){
+  pkDraft=(S.pickups||[]).map(p=>({...p,times:{...p.times}}));
+  if(!pkDraft.length) pkDraft.push(newPk());
+  drawPk(); $("#pk-err").hidden=true; $("#dlg-pickups").showModal();
+}
+function newPk(){ const k=S.members.filter(m=>m.kid); return {id:"k"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),memberId:(k[0]||S.members[0]||{}).id||"",kind:"skole",place:"",times:{}}; }
+function drawPk(){
+  const ms=S.members.filter(m=>m.kid).length?S.members.filter(m=>m.kid):S.members;
+  const days=["Man","Tir","Ons","Tor","Fre"];
+  $("#pk-list-edit").innerHTML=pkDraft.map((p,i)=>`<div class="pkedit">
+    <div class="top">
+      <select data-pi="${i}" data-pf="memberId" aria-label="Barn">${ms.map(m=>`<option value="${esc(m.id)}" ${m.id===p.memberId?"selected":""}>${esc(m.name)}</option>`).join("")}</select>
+      <select data-pi="${i}" data-pf="kind" aria-label="Type">${Object.entries({skole:"Skole",sfo:"SFO",barnehage:"Barnehage",annet:"Annet"}).map(([k,v])=>`<option value="${k}" ${p.kind===k?"selected":""}>${v}</option>`).join("")}</select>
+      <button type="button" class="btn ghost danger" data-pkrm="${i}" aria-label="Fjern">✕</button>
+      <input class="place" data-pi="${i}" data-pf="place" value="${esc(p.place||"")}" placeholder="Sted, f.eks. Midtbygda skole" maxlength="60" aria-label="Sted" style="grid-column:1/-1">
+    </div>
+    <div class="days">${days.map((n,di)=>`<label>${n}<input type="time" data-pi="${i}" data-pday="${di+1}" value="${esc(p.times[di+1]||"")}"></label>`).join("")}</div>
+    <div class="fill">Samme tid alle dager: <input type="time" id="pkfill-${i}" aria-label="Samme tid alle dager"> <button type="button" class="btn" data-pkfill="${i}" style="padding:4px 10px">Fyll inn</button></div>
+  </div>`).join("");
+}
+$("#pk-list-edit").addEventListener("input",e=>{ const t=e.target; if(t.dataset.pi===undefined) return; const p=pkDraft[+t.dataset.pi];
+  if(t.dataset.pday){ if(t.value) p.times[t.dataset.pday]=t.value; else delete p.times[t.dataset.pday]; } else if(t.dataset.pf) p[t.dataset.pf]=t.value; });
+$("#pk-list-edit").addEventListener("change",e=>{ const t=e.target; if(t.tagName==="SELECT"&&t.dataset.pi!==undefined) pkDraft[+t.dataset.pi][t.dataset.pf]=t.value; });
+$("#pk-list-edit").addEventListener("click",e=>{
+  const rm=e.target.closest("[data-pkrm]"); if(rm){ pkDraft.splice(+rm.dataset.pkrm,1); drawPk(); return; }
+  const fl=e.target.closest("[data-pkfill]"); if(fl){ const i=+fl.dataset.pkfill; const v=$("#pkfill-"+i).value; if(!v) return; for(let d=1;d<=5;d++) pkDraft[i].times[d]=v; drawPk(); }
+});
+$("#pk-add").addEventListener("click",()=>{ pkDraft.push(newPk()); drawPk(); });
+$("#pk-save").addEventListener("click",async()=>{
+  const err=$("#pk-err"); err.hidden=true;
+  try{ const j=await api("/api/pickups",{method:"PUT",body:{pickups:pkDraft}}); S.pickups=j.pickups; if(S.me) S.me.family.settings={...(S.me.family.settings||{}),pickups:j.pickups}; $("#dlg-pickups").close(); toast("Hentetidene er lagret"); render(); }
+  catch(e){ if(e.status!==401){ err.textContent=e.error; err.hidden=false; } }
+});
+$("#open-pickups").addEventListener("click",()=>{ $("#dlg-family").close(); openPickups(); });
+
 function evRow(e,cls,ds){
   ds=ds||iso(S.anchor);
   return `<div class="rowc ${cls}">${evRowInner(e,"")}${confBtn(e,ds)}</div>`;
@@ -1118,12 +1247,13 @@ function tomorrowList(d){
 function renderDay(){
   const d=S.anchor, list=eventsOn(d), isToday=iso(d)===iso(today());
   const now=new Date(), nm=now.getHours()*60+now.getMinutes();
-  if(!list.length && !S.events.length) return `<div class="td">${msgsBlock(d)}${isToday?choresToday():""}${emptyBlock()}</div>`;
+  if(!list.length && !S.events.length) return `<div class="td">${msgsBlock(d)}${pickupsBlock(d)}${isToday?choresToday():""}${emptyBlock()}</div>`;
   const past=isToday?list.filter(e=>e.start&&endMin(e)<=nm):[];
   const rest=list.filter(e=>!past.includes(e));
   let h=`<div class="td">`;
   if(!isToday) h+=`<button class="back" data-act="today">← Tilbake til i dag</button>`;
   h+=msgsBlock(d);
+  h+=pickupsBlock(d);
   if(isToday) h+=choresToday();
   const shown=S.showPast?list:rest;
   if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,null),iso(d))).join("")}</div>`;
@@ -1141,8 +1271,9 @@ function emptyBlock(){
 function renderWeek(){
   const s=startOfWeek(S.anchor), t=iso(today()); let any=false;
   const cols=[...Array(7)].map((_,i)=>{const d=addDays(s,i); const l=eventsOn(d); if(l.length) any=true;
+    const pw=pickupsWeek(d); if(pw) any=true;
     return `<section class="day ${iso(d)===t?"today":""}"><h3 data-goday="${iso(d)}"><span>${DOW[i]}</span><b>${d.getDate()}</b></h3>
-    ${l.length?l.map(e=>`<button class="wev" data-ev="${esc(e.id)}" style="--evc:${colorOf(e)}"><span class="t">${esc(e.start||"hele dagen")}${e.end?"–"+esc(e.end):""}</span><b>${esc(e.title)}</b>${cfLine(e,iso(d))}</button>`).join(""):`<span class="none">Fri</span>`}</section>`}).join("");
+    ${pw}${l.length?l.map(e=>`<button class="wev" data-ev="${esc(e.id)}" style="--evc:${colorOf(e)}"><span class="t">${esc(e.start||"hele dagen")}${e.end?"–"+esc(e.end):""}</span><b>${esc(e.title)}</b>${cfLine(e,iso(d))}</button>`).join(""):(pw?"":`<span class="none">Fri</span>`)}</section>`}).join("");
   return `<div class="week">${cols}</div>${!any?`<div style="margin-top:12px">${emptyBlock()}</div>`:exampleBar()}`;
 }
 function renderMonth(){
@@ -1658,6 +1789,7 @@ function drawAcct(){
   $("#inv-make").parentElement.parentElement.hidden=child; $("#fam-add").hidden=child; $("#fam-save").hidden=child; $("#feeds-sec").hidden=child;
   $("#acct-me").textContent="Innlogget som "+me.user.email;
   $("#admin-link").hidden=!me.user.isAdmin;
+  $("#open-pickups").hidden=me.user.kind==="child";
 }
 // ---------- kalenderabonnement ----------
 let feeds=[], feedWho=[];
@@ -1731,7 +1863,7 @@ document.addEventListener("click",e=>{
   const mem=e.target.closest("[data-mem]"); if(mem){ const id=mem.dataset.mem; S.hidden.has(id)?S.hidden.delete(id):S.hidden.add(id); render(); return; }
   if(e.target.closest("#edit-fam")){ openFam(); return; }
   const act=e.target.closest("[data-act]"); if(act){ const a=act.dataset.act;
-    if(a==="chore-new"){ openChore(null); } else if(a==="chore-ex"){ choreExamples(); } else if(a==="set-save"){ saveChoreSettings(); } else if(a==="go-chores"){ if(S.board) setBoard(false); S.view="chores"; S.anchor=today(); render(); window.scrollTo({top:0}); } else if(a==="note"){ openNote(null); } else if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
+    if(a==="pickups"){ openPickups(); } else if(a==="chore-new"){ openChore(null); } else if(a==="chore-ex"){ choreExamples(); } else if(a==="set-save"){ saveChoreSettings(); } else if(a==="go-chores"){ if(S.board) setBoard(false); S.view="chores"; S.anchor=today(); render(); window.scrollTo({top:0}); } else if(a==="note"){ openNote(null); } else if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
 });
 document.addEventListener("paste",e=>{
   if(e.target.closest("input,textarea,dialog")||S.readOnly) return;
@@ -1766,6 +1898,7 @@ function renderBoard(){
     </div>
     ${statusMsg?`<div class="status">${esc(statusMsg)}</div>`:""}
     ${ns.length?`<div class="bd-msgs">${ns.map(noteHtml).join("")}</div>`:""}
+    ${pickupsBoard(d)}
     ${window.innerWidth<700 ? `<div class="bd-list">${list.length?`<div class="rows">${list.map(e=>evRow(e,rowState(e,true,nm,null),iso(d))).join("")}</div>`:`<div class="bd-free">Ingen avtaler i dag</div>`}</div>` :
     `<div class="bd-cols" style="--cols:${Math.min(Math.max(cols.length,1),6)}">${cols.map(c=>`<section class="bd-col" style="--pc:${c.pc}"><h2>${esc(c.name)}<small>${c.items.length||""}</small></h2>${c.items.length?c.items.map(card).join(""):`<div class="bd-free">Fri i dag</div>`}</section>`).join("")}</div>`}
     ${choresBoard()}

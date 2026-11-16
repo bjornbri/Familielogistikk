@@ -559,8 +559,14 @@ app.get("/api/events", wrap(auth), wrap(async (req, res) => {
 app.post("/api/confirmations", wrap(auth), wrap(async (req, res) => {
   const eventId = clean(req.body.eventId, 60), date = clean(req.body.date, 10);
   if (!eventId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "Ugyldig avtale." });
-  const ev = await pool.query(`select 1 from events where family_id = $1 and id = $2`, [req.user.family_id, eventId]);
-  if (!ev.rows[0]) return res.status(404).json({ error: "Fant ikke avtalen." });
+  if (eventId.startsWith("p_")) {
+    const f = await pool.query(`select settings from families where id = $1`, [req.user.family_id]);
+    const list = (f.rows[0].settings && f.rows[0].settings.pickups) || [];
+    if (!list.some((p) => "p_" + p.id === eventId)) return res.status(404).json({ error: "Fant ikke hentetiden." });
+  } else {
+    const ev = await pool.query(`select 1 from events where family_id = $1 and id = $2`, [req.user.family_id, eventId]);
+    if (!ev.rows[0]) return res.status(404).json({ error: "Fant ikke avtalen." });
+  }
   await pool.query(
     `insert into confirmations (family_id, event_id, date, user_id) values ($1, $2, $3, $4)
      on conflict (family_id, event_id, date) do update set user_id = excluded.user_id, created_at = now()`,
@@ -685,6 +691,29 @@ app.get("/api/places/:id", throttle(200, 60 * 60e3), wrap(auth), wrap(async (req
   if (!r.ok) { console.error("Places details", r.status, (await r.text()).slice(0, 300)); return res.status(502).json({ error: "Fant ikke stedet." }); }
   const p = await r.json();
   res.json({ placeId: p.id, name: p.displayName?.text || "", address: p.shortFormattedAddress || p.formattedAddress || "", mapsUrl: p.googleMapsUri || "" });
+}));
+
+// ---------- Faste hentetider (skole, SFO, barnehage) ----------
+const PICKUP_KINDS = ["skole", "sfo", "barnehage", "annet"];
+app.put("/api/pickups", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const list = Array.isArray(req.body.pickups) ? req.body.pickups.slice(0, 20) : null;
+  if (!list) return res.status(400).json({ error: "Ugyldige hentetider." });
+  const f = await pool.query(`select members from families where id = $1`, [req.user.family_id]);
+  const ids = new Set((f.rows[0].members || []).map((m) => m.id));
+  const out = [];
+  for (const p of list) {
+    const memberId = clean(String(p.memberId || ""), 40);
+    if (!ids.has(memberId)) return res.status(400).json({ error: "Velg et barn for hver hentetid." });
+    const times = {};
+    for (let d = 1; d <= 7; d++) { const t = p.times && p.times[d]; if (typeof t === "string" && /^\d{2}:\d{2}$/.test(t)) times[d] = t; }
+    if (!Object.keys(times).length) continue; // uten tider: hoppes over
+    out.push({
+      id: /^[a-z0-9]{4,20}$/.test(p.id || "") ? p.id : "k" + crypto.randomBytes(5).toString("hex"),
+      memberId, kind: PICKUP_KINDS.includes(p.kind) ? p.kind : "skole", place: clean(p.place, 60), times,
+    });
+  }
+  await pool.query(`update families set settings = jsonb_set(coalesce(settings, '{}'), '{pickups}', $2::jsonb) where id = $1`, [req.user.family_id, JSON.stringify(out)]);
+  res.json({ ok: true, pickups: out });
 }));
 
 // ---------- Ukesoppgaver ----------
