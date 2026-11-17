@@ -351,14 +351,8 @@ details.ch-set summary{cursor:pointer;font-weight:700}
 .pkedit .fill input{width:auto}
 @media (max-width:480px){.pkedit .days{grid-template-columns:repeat(3,minmax(0,1fr))}}
 
-/* Tidsvelger: time og minutt hver for seg, minutt starter på 00 */
-.tp{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:3px 6px}
-.tp select{border:0;background:transparent;color:var(--ink);font-family:var(--f-mono);font-size:.95rem;padding:6px 2px;min-width:0;flex:1;appearance:none;-webkit-appearance:none;text-align:center;text-align-last:center}
-.tp select:disabled{color:var(--muted)}
-div.f:has(> .tp){display:flex;flex-direction:column;gap:4px}
-div.f > span:first-child{font-size:.8rem;font-weight:700;color:var(--muted)}
-.tp span{color:var(--muted);font-family:var(--f-mono)}
-.tp:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+/* Tidsvelger som i Google Kalender: én liste i kvarter, sluttid viser varighet */
+.tsel{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 
 /* Bottom bar on phones: navigation and the two add buttons within thumb reach */
 .bottombar{display:none}
@@ -541,8 +535,8 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
       <label class="f">Hva<input id="ev-title" required placeholder="F.eks. Tannlege, Fotballtrening"></label>
       <div class="row">
         <label class="f wide">Dato<input id="ev-date" type="date" required></label>
-        <div class="f"><span>Fra</span><input id="ev-start" type="hidden"><div class="tp" data-for="ev-start"><select class="tp-h" id="ev-start-h" aria-label="Fra, time"></select><span aria-hidden="true">:</span><select class="tp-m" id="ev-start-m" aria-label="Fra, minutter"></select></div></div>
-        <div class="f"><span>Til</span><input id="ev-end" type="hidden"><div class="tp" data-for="ev-end"><select class="tp-h" id="ev-end-h" aria-label="Til, time"></select><span aria-hidden="true">:</span><select class="tp-m" id="ev-end-m" aria-label="Til, minutter"></select></div></div>
+        <label class="f">Fra<input id="ev-start" type="hidden"><select id="ev-start-s" class="tsel"></select></label>
+        <label class="f">Til<input id="ev-end" type="hidden"><select id="ev-end-s" class="tsel"></select></label>
       </div>
       <div class="f" style="display:flex;flex-direction:column;gap:6px;font-size:.8rem;font-weight:700;color:var(--muted)">Hvem<div class="pick" id="ev-who"></div></div>
       <div class="f placewrap">
@@ -1304,7 +1298,7 @@ function openEvent(e, fromSms){
   S.editing = e && e.id ? {...e} : {id:uid(),title:"",date:iso(S.anchor),start:"",end:"",who:[],place:"",note:"",remind:"60",repeat:"",...(e||{})};
   const x=S.editing;
   $("#ev-h").textContent = S.events.some(z=>z.id===x.id) ? "Endre avtale" : (fromSms?(String(x.sms||"").startsWith("Fra bilde")?"Avtale fra bilde":"Avtale fra SMS"):"Ny avtale");
-  $("#ev-title").value=x.title||""; $("#ev-date").value=x.date||""; setTP("ev-start",x.start||""); setTP("ev-end",x.end||"");
+  $("#ev-title").value=x.title||""; $("#ev-date").value=x.date||""; if(!S.events.some(z=>z.id===x.id)&&!x.start&&!x.sms) setTimes(nextHour(),addMin(nextHour(),60)); else setTimes(x.start||"",x.end||"");
   $("#ev-place").value=x.place||""; closePlaces(); placeErr(""); placeSession=""; drawPlaceMeta(); $("#ev-note").value=x.note||""; $("#ev-remind").value=x.remind||""; $("#ev-repeat").value=x.repeat||"";
   drawWho(); drawEvConf();
   const smsEl=$("#ev-sms"); if(x.sms){smsEl.hidden=false;smsEl.innerHTML=`<div class="f" style="font-size:.8rem;font-weight:700;color:var(--muted)">Original melding</div><div class="origsms">${esc(x.sms)}</div>`} else smsEl.hidden=true;
@@ -1323,35 +1317,35 @@ function drawEvConf(){
   el.innerHTML=`<span style="flex:1;min-width:0">${c?`<b style="color:var(--ok)">✓ ${esc(confText(c))}</b>`:"Ingen har bekreftet ennå"} <small style="color:var(--muted)">· ${esc(cap(fDayLong.format(parseISO(ds))))}</small></span>${confBtn(x,ds)}`;
 }
 // ---------- tidsvelger ----------
-// Time og minutt i hver sin liste. Velger du time, står minuttet på 00. Sluttid følger starttid (+1 time, eller samme varighet).
-const TP_MINS=Array.from({length:12},(_,i)=>pad(i*5));
-function fillTP(id,val){
-  const [h,m]=(val||"").split(":");
-  const hs=$("#"+id+"-h"), ms=$("#"+id+"-m");
-  hs.innerHTML=`<option value="">${id==="ev-start"?"Hele dagen":"–"}</option>`+Array.from({length:24},(_,i)=>`<option value="${pad(i)}">${pad(i)}</option>`).join("");
-  const mins=TP_MINS.includes(m)||!m?TP_MINS:[...TP_MINS,m].sort();
-  ms.innerHTML=mins.map(x=>`<option value="${x}">${x}</option>`).join("");
-  hs.value=h||""; ms.value=m||"00"; ms.disabled=!h;
+// Én liste per tid i kvarterssteg (hele timer først i hver time). Sluttid står 1 time etter start
+// og flytter seg med starttiden; listen for sluttid viser varigheten slik Google Kalender gjør.
+const QUARTERS=Array.from({length:96},(_,i)=>pad(Math.floor(i/4))+":"+pad((i%4)*15));
+const addMin=(hm,n)=>{ const t=toMin(hm)+n; return t>=24*60?"23:45":pad(Math.floor(t/60))+":"+pad(t%60); };
+function durLabel(mins){ if(mins<60) return mins+" min"; const h=Math.floor(mins/60), m=mins%60; return m?`${h} t ${m} min`:`${h} t`; }
+function fillStart(val){
+  const list=val&&!QUARTERS.includes(val)?[...QUARTERS,val].sort():QUARTERS;
+  $("#ev-start-s").innerHTML=`<option value="">Hele dagen</option>`+list.map(t=>`<option value="${t}">${t}</option>`).join("");
+  $("#ev-start-s").value=val||""; $("#ev-start").value=val||"";
 }
-function setTP(id,val){ $("#"+id).value=val||""; fillTP(id,val||""); }
-function readTP(id){ const h=$("#"+id+"-h").value; return h?h+":"+$("#"+id+"-m").value:""; }
-const addMin=(hm,n)=>{ const t=toMin(hm)+n; return t>=24*60?"23:55":pad(Math.floor(t/60))+":"+pad(t%60); };
-function onStartChange(minuteOnly){
-  const old=$("#ev-start").value, oldEnd=$("#ev-end").value;
-  if(!minuteOnly){ $("#ev-start-m").value="00"; }
-  const nv=readTP("ev-start"); $("#ev-start").value=nv; $("#ev-start-m").disabled=!nv;
-  if(!nv){ setTP("ev-end",""); return; }
+function fillEnd(start,val){
+  const sel=$("#ev-end-s");
+  if(!start){ sel.innerHTML=`<option value="">–</option>`; sel.value=""; sel.disabled=true; $("#ev-end").value=""; return; }
+  sel.disabled=false;
+  const s0=toMin(start); let list=QUARTERS.filter(t=>toMin(t)>s0);
+  if(val&&toMin(val)>s0&&!list.includes(val)) list=[...list,val].sort();
+  sel.innerHTML=`<option value="">Ingen sluttid</option>`+list.map(t=>`<option value="${t}">${t}  (${durLabel(toMin(t)-s0)})</option>`).join("");
+  sel.value=val&&list.includes(val)?val:""; $("#ev-end").value=sel.value;
+}
+function setTimes(start,end){ fillStart(start); fillEnd(start,end); }
+$("#ev-start-s").addEventListener("change",()=>{
+  const old=$("#ev-start").value, oldEnd=$("#ev-end").value, nv=$("#ev-start-s").value;
+  $("#ev-start").value=nv;
+  if(!nv){ fillEnd("",""); return; }
   const dur=old&&oldEnd&&toMin(oldEnd)>toMin(old)?toMin(oldEnd)-toMin(old):60;
-  setTP("ev-end",addMin(nv,dur));
-}
-function onEndChange(minuteOnly){
-  if(!minuteOnly) $("#ev-end-m").value="00";
-  const nv=readTP("ev-end"); $("#ev-end").value=nv; $("#ev-end-m").disabled=!nv;
-}
-$("#ev-start-h").addEventListener("change",()=>onStartChange(false));
-$("#ev-start-m").addEventListener("change",()=>onStartChange(true));
-$("#ev-end-h").addEventListener("change",()=>onEndChange(false));
-$("#ev-end-m").addEventListener("change",()=>onEndChange(true));
+  fillEnd(nv,addMin(nv,dur));
+});
+$("#ev-end-s").addEventListener("change",()=>{ $("#ev-end").value=$("#ev-end-s").value; });
+function nextHour(){ const n=new Date(); return pad(Math.min(23,n.getHours()+1))+":00"; }
 
 function drawWho(){
   $("#ev-who").innerHTML=S.members.map(m=>`<button type="button" data-who="${esc(m.id)}" aria-pressed="${S.editing.who.includes(m.id)}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
