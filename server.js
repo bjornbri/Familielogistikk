@@ -352,6 +352,43 @@ app.get("/api/me", wrap(auth), wrap(async (req, res) => {
   res.json(out);
 }));
 
+// ---------- Fjerne kontoer ----------
+// En forelder kan fjerne en annen konto fra familien (ikke seg selv og ikke den som opprettet familien)
+app.delete("/api/accounts/:id", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const id = clean(req.params.id, 40);
+  if (id === req.user.id) return res.status(400).json({ error: "Bruk «Slett min konto» for å slette din egen konto." });
+  const { rows } = await pool.query(`select role from users where id::text = $1 and family_id = $2`, [id, req.user.family_id]);
+  if (!rows[0]) return res.status(404).json({ error: "Fant ikke kontoen." });
+  if (rows[0].role === "owner") return res.status(403).json({ error: "Den som opprettet familien kan ikke fjernes av andre." });
+  await pool.query(`delete from users where id::text = $1 and family_id = $2`, [id, req.user.family_id]);
+  res.json({ ok: true });
+}));
+
+// Slett min konto (krav fra Apple og GDPR). Er du alene, slettes hele familien med alt innhold.
+app.post("/api/me/delete", throttle(5, 15 * 60e3), wrap(auth), wrap(async (req, res) => {
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+  const u = await pool.query(`select password_hash from users where id = $1`, [req.user.id]);
+  if (!(await bcrypt.compare(password, u.rows[0].password_hash))) return res.status(401).json({ error: "Feil passord." });
+  const others = await pool.query(`select id, kind, role from users where family_id = $1 and id <> $2 order by created_at`, [req.user.family_id, req.user.id]);
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    if (!others.rows.length) {
+      await client.query(`delete from families where id = $1`, [req.user.family_id]); // sletter alt i familien
+    } else {
+      if (req.user.role === "owner") {
+        const heir = others.rows.find((o) => o.kind !== "child");
+        if (!heir) { await client.query("rollback"); return res.status(400).json({ error: "Familien må ha minst én forelder. Fjern barnekontoene først, eller inviter en annen forelder." }); }
+        await client.query(`update users set role = 'owner' where id = $1`, [heir.id]);
+      }
+      await client.query(`delete from users where id = $1`, [req.user.id]);
+    }
+    await client.query("commit");
+  } catch (e) { await client.query("rollback").catch(() => {}); throw e; } finally { client.release(); }
+  setSessionCookie(res, "", 0);
+  res.json({ ok: true, familyDeleted: !others.rows.length });
+}));
+
 // ---------- Glemt passord ----------
 async function sendMail(to, subject, text, html) {
   if (!RESEND_API_KEY) { console.log(`[e-post ikke satt opp] Til ${to}: ${subject}\n${text}`); return false; }
@@ -447,7 +484,7 @@ app.get("/api/admin/stats", wrap(auth), wrap(async (req, res) => {
   res.json({ totals, active: act, features: feat, daily, families });
 }));
 
-const parentOnly = (req, res, next) => (req.user.kind === "child" ? res.status(403).json({ error: "Bare foreldre kan gjøre dette." }) : next());
+function parentOnly(req, res, next) { return req.user.kind === "child" ? res.status(403).json({ error: "Bare foreldre kan gjøre dette." }) : next(); }
 
 app.put("/api/family", wrap(auth), parentOnly, wrap(async (req, res) => {
   const list = Array.isArray(req.body.members) ? req.body.members : null;
@@ -459,6 +496,12 @@ app.put("/api/family", wrap(auth), parentOnly, wrap(async (req, res) => {
     ...(m.kid ? { kid: true } : {}),
   })).filter((m) => m.name);
   const name = clean(req.body.name, 60);
+  // Personer som fjernes: hentetider for dem slettes, og kontoer kobles fra
+  const keep = new Set(members.map((m) => m.id));
+  const cur = await pool.query(`select settings from families where id = $1`, [req.user.family_id]);
+  const pk = ((cur.rows[0].settings || {}).pickups || []).filter((p) => keep.has(p.memberId));
+  await pool.query(`update families set settings = jsonb_set(coalesce(settings, '{}'), '{pickups}', $2::jsonb) where id = $1`, [req.user.family_id, JSON.stringify(pk)]);
+  await pool.query(`update users set member_id = null where family_id = $1 and member_id is not null and not (member_id = any($2::text[]))`, [req.user.family_id, [...keep]]);
   await pool.query(`update families set members = $1${name ? ", name = $3" : ""} where id = $2`,
     name ? [JSON.stringify(members), req.user.family_id, name] : [JSON.stringify(members), req.user.family_id]);
   res.json(await familyPayload(req.user));

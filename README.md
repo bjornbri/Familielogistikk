@@ -40,6 +40,13 @@ Merk om gratisplanene hos Render:
 - Webtjenesten sover etter en stund uten trafikk. Første besøk etter det kan ta opptil et minutt.
 - Gratis Postgres er tidsbegrenset. Bytt til en betalt databaseplan før dere legger inn data dere vil beholde.
 
+## Fjerne personer og kontoer
+
+Under **Familie**:
+- **Fjern** ved en person fjerner personen fra kalenderen (to trykk). Hentetider for personen slettes også.
+- **Fjern** ved en konto i «Kontoer i familien» tar kontoen ut av familien. Bare foreldre kan gjøre dette, og ikke for den som opprettet familien.
+- **Slett min konto** krever passord. Er du alene i familien, slettes hele familien med alt innhold. Den som opprettet familien, gir den videre til en annen forelder.
+
 ## Bruksstatistikk
 
 Åpne `/admin` (eller **Familie → Bruksstatistikk**) når e-posten din står i `ADMIN_EMAILS`.

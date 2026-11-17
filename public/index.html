@@ -723,9 +723,16 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
       </div>
       <div class="acct">
         <h3>Kontoer i familien</h3>
-        <ul id="acct-list"></ul>
+        <ul id="acct-list" style="list-style:none;padding:0"></ul>
         <button type="button" class="btn" id="open-pickups" style="align-self:flex-start">Faste hentetider (skole og barnehage)</button>
         <a href="/admin" id="admin-link" class="btn" hidden style="align-self:flex-start;text-decoration:none">Bruksstatistikk</a>
+        <details id="delme" style="font-size:.88rem"><summary style="cursor:pointer;color:var(--danger);font-weight:700">Slett min konto</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            <p id="delme-info" style="margin:0;color:var(--muted)"></p>
+            <label class="f">Skriv passordet ditt for å bekrefte<input id="delme-pass" type="password" autocomplete="current-password"></label>
+            <p class="auth-err" id="delme-err" hidden></p>
+            <div><button type="button" class="btn danger" id="delme-go" style="border-color:var(--danger)">Slett kontoen for godt</button></div>
+          </div></details>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span id="acct-me" style="font-size:.88rem;color:var(--muted)"></span><button type="button" class="btn danger" id="logout">Logg ut</button></div>
       </div>
     </div>
@@ -1818,11 +1825,15 @@ const dFam=$("#dlg-family"); let famDraft=[];
 function openFam(){ famDraft=S.members.map(m=>({...m})); drawFam(); drawAcct(); feedWho=[]; drawFeedWho(); loadFeeds(); $("#feed-err").hidden=true; $("#inv-box").hidden=true; $("#inv-share").hidden=true; dFam.showModal(); }
 function drawAcct(){
   const me=S.me; if(!me) return;
-  $("#acct-list").innerHTML=(me.family.accounts||[]).map(a=>`<li>${esc(a.name)} · ${esc(a.email)}${a.role==="owner"?" (opprettet familien)":""}${a.kind==="child"?" (barn)":""}</li>`).join("");
+  const canRemove=a=>me.user.kind!=="child"&&a.id!==me.user.id&&a.role!=="owner";
+  $("#acct-list").innerHTML=(me.family.accounts||[]).map(a=>`<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0"><span style="min-width:0;overflow-wrap:anywhere">${esc(a.name)} · ${esc(a.email)}${a.role==="owner"?" (opprettet familien)":""}${a.kind==="child"?" (barn)":""}${a.id===me.user.id?" · deg":""}</span>${canRemove(a)?`<button type="button" class="btn ghost danger" data-acrm="${esc(a.id)}" style="font-size:.82rem;padding:4px 8px;flex:none">Fjern</button>`:""}</li>`).join("");
   const child=me.user.kind==="child";
   $("#inv-make").parentElement.parentElement.hidden=child; $("#fam-add").hidden=child; $("#fam-save").hidden=child; $("#feeds-sec").hidden=child;
   $("#acct-me").textContent="Innlogget som "+me.user.email;
   $("#admin-link").hidden=!me.user.isAdmin;
+  const alone=(me.family.accounts||[]).length<=1;
+  $("#delme-info").textContent=alone?"Du er den eneste i familien. Hele familien slettes, med alle avtaler, beskjeder, oppgaver og bilder. Dette kan ikke angres.":"Kontoen din slettes og du logges ut. Familiens kalender blir værende for de andre."+(me.user.role==="owner"?" En annen forelder overtar familien.":"");
+  $("#delme-pass").value=""; $("#delme-err").hidden=true; $("#delme").open=false;
   $("#open-pickups").hidden=me.user.kind==="child";
 }
 // ---------- kalenderabonnement ----------
@@ -1867,16 +1878,41 @@ $("#inv-copy").addEventListener("click",async()=>{
 $("#inv-share").addEventListener("click",()=>{ navigator.share({title:"Familielogistikk",text:"Bli med i familiekalenderen vår:",url:invUrl}).catch(()=>{}); });
 $("#logout").addEventListener("click",async()=>{ dFam.close(); try{ await api("/api/logout",{method:"POST",body:{}}); }catch{} S.events=[]; S.loaded=false; showAuth(); });
 $("#open-fam").addEventListener("click",()=>openFam());
+$("#acct-list").addEventListener("click",async e=>{
+  const b=e.target.closest("[data-acrm]"); if(!b) return;
+  if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Trykk igjen"; setTimeout(()=>{ if(b.isConnected&&b.dataset.armed){ b.dataset.armed=""; b.textContent="Fjern"; } },4000); return; }
+  try{ await api("/api/accounts/"+encodeURIComponent(b.dataset.acrm),{method:"DELETE"}); const me=await api("/api/me"); applyMe(me); drawAcct(); toast("Kontoen er fjernet fra familien"); }
+  catch(x){ if(x.status!==401) toast(x.error); }
+});
+$("#delme-go").addEventListener("click",async()=>{
+  const err=$("#delme-err"); err.hidden=true; const pw=$("#delme-pass").value;
+  if(!pw){ err.textContent="Skriv passordet ditt."; err.hidden=false; return; }
+  try{ await api("/api/me/delete",{method:"POST",body:{password:pw},noAuthRedirect:true}); dFam.close(); S.events=[]; S.notes=[]; S.ch=null; S.loaded=false; showAuth(); toast("Kontoen er slettet"); }
+  catch(x){ err.textContent=x.error; err.hidden=false; }
+});
 function drawFam(){
   $("#fam-body").innerHTML=famDraft.map((m,i)=>`<div class="mrow"><input class="f" id="fam-${esc(m.id)}" value="${esc(m.name)}" data-i="${i}" aria-label="Navn" style="border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px">
     <div class="swatch">${[...Array(COLORS)].map((_,c)=>`<button type="button" data-i="${i}" data-c="${c+1}" aria-label="Farge ${c+1}" aria-pressed="${m.c===c+1}" style="background:var(--m${c+1})"></button>`).join("")}</div>
-    <button type="button" class="btn ghost" data-rm="${i}" aria-label="Fjern">✕</button>
+    <button type="button" class="btn ghost danger" data-rm="${i}" aria-label="Fjern ${esc(m.name||"person")}" style="font-size:.85rem">Fjern</button>
     <button type="button" class="chip kidflag" data-kidi="${i}" aria-pressed="${!!m.kid}" style="grid-column:1/-1;justify-self:start">${m.kid?"✓ Barn (får oppgaver)":"Marker som barn"}</button></div>`).join("")
     +`<p style="margin:0;font-size:.85rem;color:var(--muted)">Navnene brukes også til å foreslå hvem en SMS gjelder.</p>`;
 }
 $("#fam-body").addEventListener("input",e=>{if(e.target.dataset.i!==undefined&&e.target.tagName==="INPUT") famDraft[+e.target.dataset.i].name=e.target.value});
 $("#fam-body").addEventListener("click",e=>{const k=e.target.closest("[data-kidi]"); if(k){ const m=famDraft[+k.dataset.kidi]; m.kid=!m.kid; drawFam(); return; } const c=e.target.closest("[data-c]"); if(c){famDraft[+c.dataset.i].c=+c.dataset.c;drawFam();return}
-  const r=e.target.closest("[data-rm]"); if(r&&famDraft.length>1){famDraft.splice(+r.dataset.rm,1);drawFam();}});
+  const r=e.target.closest("[data-rm]"); if(r){ removeMember(r,+r.dataset.rm); } });
+async function removeMember(btn,i){
+  if(famDraft.length<=1){ toast("Familien må ha minst én person"); return; }
+  const m=famDraft[i];
+  if(!btn.dataset.armed){
+    btn.dataset.armed="1"; btn.textContent="Trykk igjen for å fjerne";
+    setTimeout(()=>{ if(btn.isConnected&&btn.dataset.armed){ btn.dataset.armed=""; btn.textContent="Fjern"; } },4000); return;
+  }
+  famDraft.splice(i,1);
+  if(!m.name.trim()){ drawFam(); return; } // ny, tom rad
+  const list=famDraft.filter(x=>x.name.trim()).map(x=>({...x,name:x.name.trim()}));
+  await saveMembers(list); famDraft=S.members.map(x=>({...x})); drawFam(); drawAcct(); feedWho=feedWho.filter(id=>S.members.some(x=>x.id===id)); drawFeedWho();
+  toast(`${m.name} er fjernet fra familien`);
+}
 $("#fam-add").addEventListener("click",()=>{famDraft.push({id:"m"+Date.now().toString(36),name:"",c:(famDraft.length%COLORS)+1});drawFam();});
 $("#fam-save").addEventListener("click",()=>{const list=famDraft.filter(m=>m.name.trim()).map(m=>({...m,name:m.name.trim()})); if(!list.length) return; dFam.close(); saveMembers(list);});
 
