@@ -21,6 +21,14 @@ Foreldre legger inn faste tider under **Familie → Faste hentetider**: når sko
 Tidene vises på I dag, tavla («Hvem henter i dag») og i ukevisningen. Det eneste som kan trykkes på, er **«Jeg henter»**. Da ser alle hvem som henter hvem.
 En hentetid som ingen har bekreftet, markeres gult, og rødt fra 1,5 time før.
 
+## Hjelp fra besteforeldre (uten konto)
+
+- Legg inn **hjelpere** med navn og mobil under **Familie** (eller direkte første gang du spør).
+- Ved en hentetid eller avtale: **«Spør om hjelp»** → velg hvem → **Send SMS**. Meldinger åpnes med ferdig tekst og en personlig lenke.
+- Lenken (`/h/…`) åpner en enkel side med **«Ja, jeg kan»** / **«Nei, dessverre»**. Ingen innlogging.
+- Spør du flere, får den som svarer ja først oppdraget. Appen viser «✓ Bestemor henter» og gir beskjed når noen svarer.
+- Lenken viser bare den ene forespørselen og slutter å virke 2 timer etter hentetiden, eller når forespørselen avbrytes.
+
 ## Ukesoppgaver
 
 - **Faste oppgaver** per barn og **oppgavebørs** med «først til mølla» (maks 2 reservert samtidig, 24 timers frist, kan endres).

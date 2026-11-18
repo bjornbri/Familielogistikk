@@ -354,6 +354,25 @@ details.ch-set summary{cursor:pointer;font-weight:700}
 /* Tidsvelger som i Google Kalender: én liste i kvarter, sluttid viser varighet */
 .tsel{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
 
+/* Hjelp fra besteforeldre */
+.pkact{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.askh{border:0;background:none;color:var(--muted);font-size:.76rem;font-weight:700;padding:2px 2px;text-decoration:underline;text-underline-offset:2px}
+.askh:hover{color:var(--ink)}
+.askh.wait{color:var(--ink);text-decoration:none;background:color-mix(in srgb,var(--accent) 16%,var(--surface));border-radius:999px;padding:3px 9px}
+.conf.helper{border-style:solid}
+.hl{display:flex;flex-direction:column;gap:8px}
+.hrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;background:var(--bg);border-radius:10px;padding:10px 12px}
+.hrow b{font-size:1rem}
+.hrow small{display:block;color:var(--muted);font-family:var(--f-mono);font-size:.8rem}
+.hrow .btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.hpick{display:flex;flex-direction:column;gap:6px}
+.hpick label{display:flex;gap:10px;align-items:center;background:var(--bg);border-radius:10px;padding:10px 12px;font-size:.95rem;cursor:pointer}
+.hpick input{width:20px;height:20px}
+.hwhat{background:color-mix(in srgb,var(--accent) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 50%,var(--line));border-radius:12px;padding:10px 12px;font-size:.95rem}
+.ans{font-size:.82rem;font-weight:700}
+.ans.yes{color:var(--ok)} .ans.no{color:var(--danger)} .ans.wait{color:var(--muted)}
+
 /* Bottom bar on phones: navigation and the two add buttons within thumb reach */
 .bottombar{display:none}
 @media (max-width:640px){
@@ -695,6 +714,14 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
   </div>
 </dialog>
 
+<dialog id="dlg-help">
+  <div class="dlg">
+    <header><h2 id="help-h">Spør om hjelp</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
+    <div class="body" id="help-body"></div>
+    <footer id="help-foot"></footer>
+  </div>
+</dialog>
+
 <dialog id="dlg-family">
   <div class="dlg">
     <header><h2>Familie og konto</h2><button type="button" class="btn ghost" data-close>Lukk</button></header>
@@ -724,6 +751,14 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
       <div class="acct">
         <h3>Kontoer i familien</h3>
         <ul id="acct-list" style="list-style:none;padding:0"></ul>
+        <div class="acct" id="helpers-sec" style="padding-top:0;border-top:0">
+          <h3>Hjelpere (besteforeldre, naboer)</h3>
+          <p style="margin:0;font-size:.88rem;color:var(--muted)">De trenger ingen konto. Når du trenger hjelp til henting, får de en SMS med en lenke der de svarer ja eller nei.</p>
+          <ul id="helper-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px"></ul>
+          <div class="row2"><label class="f">Navn<input id="helper-name" placeholder="F.eks. Bestemor Kari" maxlength="40"></label><label class="f">Mobil<input id="helper-phone" type="tel" inputmode="tel" placeholder="F.eks. 912 34 567" maxlength="20"></label></div>
+          <p class="auth-err" id="helper-err" hidden></p>
+          <div><button type="button" class="btn" id="helper-add">+ Legg til hjelper</button></div>
+        </div>
         <button type="button" class="btn" id="open-pickups" style="align-self:flex-start">Faste hentetider (skole og barnehage)</button>
         <a href="/admin" id="admin-link" class="btn" hidden style="align-self:flex-start;text-decoration:none">Bruksstatistikk</a>
         <details id="delme" style="font-size:.88rem"><summary style="cursor:pointer;color:var(--danger);font-weight:700">Slett min konto</summary>
@@ -819,12 +854,16 @@ async function api(path,opts={}){
 function applyMe(me){
   S.me=me; imgEnabled=!!me.imageReading; placesEnabled=!!me.placesSearch;
   S.pickups=(me.family.settings&&me.family.settings.pickups)||[];
+  S.helpers=(me.family.settings&&me.family.settings.helpers)||[];
   if(Array.isArray(me.family.members)&&me.family.members.length) S.members=me.family.members;
   $("#img-zone").hidden=false; $("#img-or").hidden=false;
 }
 async function loadEvents(){
-  const [j,n]=await Promise.all([api("/api/events"),api("/api/notes").catch(()=>({notes:S.notes||[]}))]);
+  const [j,n,hp]=await Promise.all([api("/api/events"),api("/api/notes").catch(()=>({notes:S.notes||[]})),api("/api/help").catch(()=>({requests:S.help||[]}))]);
   S.events=j.events||[]; S.notes=n.notes||[]; S.loaded=true;
+  const before=new Set((S.help||[]).filter(r=>r.status==="accepted").map(r=>r.id)), first=!S.help;
+  S.help=hp.requests||[];
+  if(!first) for(const r of S.help) if(r.status==="accepted"&&!before.has(r.id)) toast(`${String(r.acceptedName||"Noen").split(" ")[0]} svarte ja: ${r.what}`);
   S.confs={}; for(const c of (j.confirmations||[])) S.confs[c.eventId+"|"+c.date]=c;
   if(statusMsg) statusMsg=""; render();
 }
@@ -1124,6 +1163,7 @@ function confName(c){
 }
 function confText(c){ return c?(S.me&&c.userId===S.me.user.id?"Du tar den":confName(c)+" tar den"):""; }
 function confBtn(e,ds){
+  const hr=helpFor(e.id,ds); if(hr&&hr.status==="accepted") return helperPill(hr,"tar den");
   if(S.readOnly){ const c=confOf(e,ds); return c?`<span class="cfline">✓ ${esc(confText(c))}</span>`:""; }
   const c=confOf(e,ds), mine=c&&S.me&&c.userId===S.me.user.id;
   const label=c?(mine?"Du tar den":confName(c)):"Bekreft";
@@ -1160,7 +1200,16 @@ function pickupsOn(d){
     return {id:"p_"+p.id,memberId:p.memberId,m,kind:p.kind,place:p.place||"",time:p.times[wd],title:(m?m.name:"Barn")+": "+(PICK_KIND[p.kind]||"Henting")}; })
     .filter(p=>!S.hidden.has(p.memberId)).sort((a,b)=>a.time.localeCompare(b.time));
 }
+function helpFor(id,ds){ const l=(S.help||[]).filter(r=>r.targetId===id&&r.date===ds&&r.status!=="closed"); return l[l.length-1]||null; }
+function helperPill(r,verb){ return `<button class="conf on helper" data-help="${esc(r.id)}" aria-label="${esc(r.acceptedName)} ${verb}. Trykk for detaljer"><span class="ck" aria-hidden="true">✓</span>${esc(String(r.acceptedName||"").split(" ")[0])} ${verb}</button>`; }
+function askLine(id,ds,c){
+  const r=helpFor(id,ds);
+  if(r&&r.status==="open"){ const yes=r.asked.filter(a=>a.answer==="no").length; return `<button class="askh wait" data-help="${esc(r.id)}">Spurt ${r.asked.length}${yes?` · ${yes} nei`:""} · venter</button>`; }
+  if(c||!isParent()||S.readOnly) return "";
+  return `<button class="askh" data-askhelp="${esc(id)}" data-d="${ds}">Spør om hjelp</button>`;
+}
 function pickBtn(pk,ds){
+  const hr=helpFor(pk.id,ds); if(hr&&hr.status==="accepted") return helperPill(hr,"henter");
   const c=confOf(pk,ds), mine=c&&S.me&&c.userId===S.me.user.id;
   if(S.readOnly) return c?`<span class="cfline">✓ ${esc(mine?"Du henter":confName(c)+" henter")}</span>`:"";
   const label=c?(mine?"Du henter":confName(c)+" henter"):"Jeg henter";
@@ -1168,13 +1217,13 @@ function pickBtn(pk,ds){
   return `<button class="conf ${c?"on":""}" data-conf="${esc(pk.id)}" data-d="${ds}" aria-label="${esc(aria)}" aria-pressed="${!!c}"><span class="ck" aria-hidden="true">✓</span>${esc(label)}</button>`;
 }
 function pickRow(pk,d){
-  const ds=iso(d), c=confOf(pk,ds), isT=ds===iso(today());
+  const ds=iso(d), hr=helpFor(pk.id,ds), c=confOf(pk,ds)||(hr&&hr.status==="accepted"?hr:null), isT=ds===iso(today());
   const now=new Date(), nm=now.getHours()*60+now.getMinutes(), tm=toMin(pk.time);
   let cls="", warn="";
   if(isT&&!c){ if(nm>=tm-90&&nm<tm+30){ cls="late"; warn="Ingen har bekreftet ennå"; } else if(nm<tm) cls="open"; }
   if(isT&&nm>=tm+30) cls="past";
   const sub=[PICK_KIND[pk.kind]||"Henting",pk.place].filter(Boolean).join(" · ");
-  return `<div class="pk ${cls}" style="--pc:${pk.m?`var(--m${pk.m.c})`:"var(--muted)"}"><span class="t">${esc(pk.time)}</span><span class="pb"><b><i></i>${esc(pk.m?pk.m.name:"Barn")}</b><span>${esc(sub)}</span>${warn?`<span class="warn">${esc(warn)}</span>`:""}</span>${pickBtn(pk,ds)}</div>`;
+  return `<div class="pk ${cls}" style="--pc:${pk.m?`var(--m${pk.m.c})`:"var(--muted)"}"><span class="t">${esc(pk.time)}</span><span class="pb"><b><i></i>${esc(pk.m?pk.m.name:"Barn")}</b><span>${esc(sub)}</span>${warn?`<span class="warn">${esc(warn)}</span>`:""}</span><span class="pkact">${pickBtn(pk,ds)}${cls==="past"?"":askLine(pk.id,ds,c)}</span></div>`;
 }
 function pickupsBlock(d){
   const list=pickupsOn(d);
@@ -1321,7 +1370,8 @@ function drawEvConf(){
   if(!exists){ el.hidden=true; return; }
   const ds=S.editDate||(x.repeat?iso(S.anchor):x.date)||iso(S.anchor); const c=confOf(x,ds);
   el.hidden=false;
-  el.innerHTML=`<span style="flex:1;min-width:0">${c?`<b style="color:var(--ok)">✓ ${esc(confText(c))}</b>`:"Ingen har bekreftet ennå"} <small style="color:var(--muted)">· ${esc(cap(fDayLong.format(parseISO(ds))))}</small></span>${confBtn(x,ds)}`;
+  const al=askLine(x.id,ds,c||(helpFor(x.id,ds)||{}).status==="accepted");
+  el.innerHTML=`<span style="flex:1;min-width:0">${c?`<b style="color:var(--ok)">✓ ${esc(confText(c))}</b>`:"Ingen har bekreftet ennå"} <small style="color:var(--muted)">· ${esc(cap(fDayLong.format(parseISO(ds))))}</small></span>${confBtn(x,ds)}${al?`<span style="flex-basis:100%;display:flex;justify-content:flex-end">${al}</span>`:""}`;
 }
 // ---------- tidsvelger ----------
 // Én liste per tid i kvarterssteg (hele timer først i hver time). Sluttid står 1 time etter start
@@ -1353,6 +1403,87 @@ $("#ev-start-s").addEventListener("change",()=>{
 });
 $("#ev-end-s").addEventListener("change",()=>{ $("#ev-end").value=$("#ev-end-s").value; });
 function nextHour(){ const n=new Date(); return pad(Math.min(23,n.getHours()+1))+":00"; }
+
+// ---------- spør om hjelp ----------
+const isApple=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
+const smsHref=(phone,text)=>`sms:${phone}${isApple()?"&":"?"}body=${encodeURIComponent(text)}`;
+let helpCtx=null;
+function openAskHelp(id,ds){
+  helpCtx={id,ds}; const d=$("#dlg-help"); $("#help-h").textContent="Spør om hjelp";
+  const pk=id.startsWith("p_")?pickupsOn(parseISO(ds)).find(p=>p.id===id):null; const ev=pk?null:S.events.find(e=>e.id===id);
+  const what=pk?`${pk.m?pk.m.name:"Barnet"} · ${PICK_KIND[pk.kind]||"Henting"} kl. ${pk.time}${pk.place?" · "+pk.place:""}`:ev?`${ev.title}${ev.start?" kl. "+ev.start:""}`:"";
+  const dayTxt=cap(fDayLong.format(parseISO(ds)));
+  const hs=S.helpers||[];
+  $("#help-body").innerHTML=`<div class="hwhat"><b>${esc(what)}</b><br><small style="color:var(--muted)">${esc(dayTxt)}</small></div>
+    ${hs.length?`<span style="font-size:.8rem;font-weight:700;color:var(--muted)">Hvem vil du spørre?</span><div class="hpick">${hs.map(h=>`<label><input type="checkbox" data-hh="${esc(h.id)}" checked> <span><b>${esc(h.name)}</b> <small style="color:var(--muted);font-family:var(--f-mono)">${esc(h.phone)}</small></span></label>`).join("")}</div>
+      <p style="margin:0;font-size:.85rem;color:var(--muted)">Spør du flere, får den som svarer ja først oppdraget.</p>`
+    :`<p style="margin:0">Du har ingen hjelpere ennå. Legg inn besteforeldre eller andre du kan spørre:</p>
+      <div class="row2"><label class="f">Navn<input id="hq-name" placeholder="F.eks. Bestemor Kari" maxlength="40"></label><label class="f">Mobil<input id="hq-phone" type="tel" inputmode="tel" placeholder="912 34 567" maxlength="20"></label></div>`}
+    <p class="auth-err" id="help-err" hidden></p>`;
+  $("#help-foot").innerHTML=`<button type="button" class="btn" data-close>Avbryt</button><button type="button" class="btn sms" id="help-go">Lag SMS</button>`;
+  if(!d.open) d.showModal();
+}
+async function sendAskHelp(){
+  const err=$("#help-err"); err.hidden=true;
+  try{
+    if(!(S.helpers||[]).length){
+      const name=$("#hq-name").value.trim(), phone=$("#hq-phone").value.trim();
+      if(!name||!phone){ err.textContent="Skriv navn og mobilnummer."; err.hidden=false; return; }
+      const j=await api("/api/helpers",{method:"PUT",body:{helpers:[{name,phone}]}}); S.helpers=j.helpers; if(S.me) S.me.family.settings.helpers=j.helpers;
+    }
+    const ids=(S.helpers.length&&document.querySelector("[data-hh]"))?[...document.querySelectorAll("[data-hh]:checked")].map(x=>x.dataset.hh):S.helpers.map(h=>h.id);
+    if(!ids.length){ err.textContent="Velg minst én hjelper."; err.hidden=false; return; }
+    $("#help-go").disabled=true;
+    const r=await api("/api/help",{method:"POST",body:{targetId:helpCtx.id,date:helpCtx.ds,helperIds:ids}});
+    showSendLinks(r); await loadEvents();
+  }catch(e){ if(e.status!==401){ err.textContent=e.error; err.hidden=false; } const g=$("#help-go"); if(g) g.disabled=false; }
+}
+function showSendLinks(r){
+  $("#help-h").textContent="Send SMS";
+  $("#help-body").innerHTML=`<div class="hwhat">Kan du ${esc(r.what)}?</div>
+    <p style="margin:0;font-size:.88rem;color:var(--muted)">Trykk «Send SMS». Meldinger åpnes med teksten ferdig utfylt, og du trykker Send. Svaret dukker opp her i appen.</p>
+    <div class="hl">${r.links.map((l,i)=>`<div class="hrow"><span><b>${esc(l.name)}</b><small>${esc(l.phone)}</small></span><span class="btns"><a class="btn sms" href="${esc(smsHref(l.phone,l.text))}">Send SMS</a><button type="button" class="btn" data-hcopy="${i}">Kopier</button></span></div>`).join("")}</div>`;
+  $("#help-foot").innerHTML=`<button type="button" class="btn primary" data-close>Ferdig</button>`;
+  $("#help-body").onclick=async e=>{ const b=e.target.closest("[data-hcopy]"); if(!b) return; const l=r.links[+b.dataset.hcopy];
+    try{ await navigator.clipboard.writeText(l.text); toast("Teksten er kopiert"); }catch{ toast("Kunne ikke kopiere. Hold fingeren på teksten for å kopiere."); } };
+}
+function openHelpStatus(reqId){
+  const r=(S.help||[]).find(x=>x.id===reqId); if(!r) return;
+  $("#help-h").textContent=r.status==="accepted"?"Hjelp ordnet":"Venter på svar";
+  const ans=a=>a.answer==="yes"?`<span class="ans yes">✓ Ja</span>`:a.answer==="no"?`<span class="ans no">Nei</span>`:a.answer==="late"?`<span class="ans wait">Svarte for sent</span>`:`<span class="ans wait">Ikke svart</span>`;
+  $("#help-body").innerHTML=`<div class="hwhat">${r.status==="accepted"?`<b>✓ ${esc(r.acceptedName)}</b> sa ja til å `:"Spurt om å "}${esc(r.what)}</div>
+    <div class="hl">${r.asked.map(a=>`<div class="hrow"><b>${esc(a.name)}</b>${ans(a)}</div>`).join("")}</div>`;
+  $("#help-foot").innerHTML=isParent()?`<button type="button" class="btn danger left" data-hcancel="${esc(r.id)}">Avbryt forespørselen</button>${r.status==="open"?`<button type="button" class="btn" data-askhelp="${esc(r.targetId)}" data-d="${esc(r.date)}">Spør flere</button>`:""}<button type="button" class="btn primary" data-close>Lukk</button>`:`<button type="button" class="btn primary" data-close>Lukk</button>`;
+  const d=$("#dlg-help"); if(!d.open) d.showModal();
+}
+document.addEventListener("click",async e=>{
+  const a=e.target.closest("[data-askhelp]"), h=e.target.closest("[data-help]"), go=e.target.closest("#help-go"), cn=e.target.closest("[data-hcancel]");
+  if(!a&&!h&&!go&&!cn) return;
+  e.preventDefault(); e.stopPropagation();
+  if(a){ if($("#dlg-event").open) $("#dlg-event").close(); openAskHelp(a.dataset.askhelp,a.dataset.d); return; }
+  if(h){ if($("#dlg-event").open) $("#dlg-event").close(); openHelpStatus(h.dataset.help); return; }
+  if(go){ sendAskHelp(); return; }
+  if(cn){ if(!cn.dataset.armed){ cn.dataset.armed="1"; cn.textContent="Trykk igjen for å avbryte"; return; }
+    try{ await api("/api/help/"+encodeURIComponent(cn.dataset.hcancel),{method:"DELETE"}); $("#dlg-help").close(); toast("Forespørselen er avbrutt"); await loadEvents(); }catch(x){ if(x.status!==401) toast(x.error); } }
+},true);
+// Hjelpere i Familie-dialogen
+function drawHelpers(){
+  const hs=S.helpers||[];
+  $("#helper-list").innerHTML=hs.map((h,i)=>`<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--bg);border-radius:10px;padding:8px 10px"><span><b>${esc(h.name)}</b> <small style="color:var(--muted);font-family:var(--f-mono)">${esc(h.phone)}</small></span><button type="button" class="btn ghost danger" data-hrm="${i}" style="font-size:.82rem;padding:4px 8px">Fjern</button></li>`).join("");
+}
+async function saveHelpers(list){
+  const err=$("#helper-err"); err.hidden=true;
+  try{ const j=await api("/api/helpers",{method:"PUT",body:{helpers:list}}); S.helpers=j.helpers; if(S.me) S.me.family.settings={...(S.me.family.settings||{}),helpers:j.helpers}; drawHelpers(); return true; }
+  catch(e){ if(e.status!==401){ err.textContent=e.error; err.hidden=false; } return false; }
+}
+$("#helper-add").addEventListener("click",async()=>{
+  const name=$("#helper-name").value.trim(), phone=$("#helper-phone").value.trim();
+  if(!name||!phone){ const er=$("#helper-err"); er.textContent="Skriv navn og mobilnummer."; er.hidden=false; return; }
+  if(await saveHelpers([...(S.helpers||[]),{name,phone}])){ $("#helper-name").value=""; $("#helper-phone").value=""; toast(`${name} er lagt til som hjelper`); }
+});
+$("#helper-list").addEventListener("click",async e=>{ const b=e.target.closest("[data-hrm]"); if(!b) return;
+  if(!b.dataset.armed){ b.dataset.armed="1"; b.textContent="Trykk igjen"; return; }
+  const list=(S.helpers||[]).filter((_,i)=>i!==+b.dataset.hrm); if(await saveHelpers(list)) toast("Hjelperen er fjernet"); });
 
 function drawWho(){
   $("#ev-who").innerHTML=S.members.map(m=>`<button type="button" data-who="${esc(m.id)}" aria-pressed="${S.editing.who.includes(m.id)}"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join("");
@@ -1835,6 +1966,7 @@ function drawAcct(){
   $("#delme-info").textContent=alone?"Du er den eneste i familien. Hele familien slettes, med alle avtaler, beskjeder, oppgaver og bilder. Dette kan ikke angres.":"Kontoen din slettes og du logges ut. Familiens kalender blir værende for de andre."+(me.user.role==="owner"?" En annen forelder overtar familien.":"");
   $("#delme-pass").value=""; $("#delme-err").hidden=true; $("#delme").open=false;
   $("#open-pickups").hidden=me.user.kind==="child";
+  $("#helpers-sec").hidden=me.user.kind==="child"; drawHelpers(); $("#helper-err").hidden=true;
 }
 // ---------- kalenderabonnement ----------
 let feeds=[], feedWho=[];

@@ -133,6 +133,28 @@ async function migrate() {
       opens int not null default 1,
       primary key (user_id, day)
     );
+    create table if not exists help_requests (
+      id uuid primary key default gen_random_uuid(),
+      family_id uuid not null references families(id) on delete cascade,
+      target_id text not null,
+      date text not null,
+      what text not null,
+      status text not null default 'open',
+      accepted_helper text,
+      accepted_name text,
+      accepted_at timestamptz,
+      created_by uuid references users(id) on delete set null,
+      created_at timestamptz not null default now(),
+      expires_at timestamptz not null
+    );
+    create table if not exists help_links (
+      token_hash text primary key,
+      request_id uuid not null references help_requests(id) on delete cascade,
+      helper_id text not null,
+      helper_name text not null,
+      answer text,
+      answered_at timestamptz
+    );
     create table if not exists confirmations (
       family_id uuid not null references families(id) on delete cascade,
       event_id text not null,
@@ -759,6 +781,139 @@ app.put("/api/pickups", wrap(auth), parentOnly, wrap(async (req, res) => {
   res.json({ ok: true, pickups: out });
 }));
 
+// ---------- Hjelpere (besteforeldre, naboer) uten konto ----------
+app.put("/api/helpers", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const list = Array.isArray(req.body.helpers) ? req.body.helpers.slice(0, 20) : null;
+  if (!list) return res.status(400).json({ error: "Ugyldig liste." });
+  const out = [];
+  for (const h of list) {
+    const name = clean(h.name, 40);
+    const phone = clean(String(h.phone || ""), 30).replace(/[\s-]/g, "");
+    if (!name) continue;
+    if (!/^\+?\d{8,15}$/.test(phone)) return res.status(400).json({ error: `Mobilnummeret til ${name} ser ikke riktig ut. Bruk 8 siffer, eller +47 og 8 siffer.` });
+    out.push({ id: /^[a-z0-9]{4,20}$/.test(h.id || "") ? h.id : "h" + crypto.randomBytes(5).toString("hex"), name, phone });
+  }
+  await pool.query(`update families set settings = jsonb_set(coalesce(settings, '{}'), '{helpers}', $2::jsonb) where id = $1`, [req.user.family_id, JSON.stringify(out)]);
+  res.json({ ok: true, helpers: out });
+}));
+
+const PICK_LABEL = { skole: "på skolen", sfo: "på SFO", barnehage: "i barnehagen", annet: "" };
+const WEEKDAYS_NO = ["søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"];
+const MONTHS_NO = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
+function dayWords(date) {
+  const today = oslo(new Date()).date, tomorrow = oslo(new Date(Date.now() + 864e5)).date;
+  if (date === today) return "i dag";
+  if (date === tomorrow) return "i morgen";
+  const [y, m, d] = date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${WEEKDAYS_NO[wd]} ${d}. ${MONTHS_NO[m - 1]}`;
+}
+// Bygger teksten serverside fra familiens egne data, så lenken bare viser det som trengs
+async function helpTarget(familyId, targetId, date) {
+  const f = await pool.query(`select members, settings from families where id = $1`, [familyId]);
+  const members = f.rows[0].members || []; const settings = f.rows[0].settings || {};
+  const nameOf = (id) => (members.find((m) => m.id === id) || {}).name || "";
+  if (targetId.startsWith("p_")) {
+    const p = (settings.pickups || []).find((x) => "p_" + x.id === targetId); if (!p) return null;
+    const [y, m, d] = date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
+    const time = p.times && p.times[wd]; if (!time) return null;
+    const where = p.place ? `${p.kind === "barnehage" ? "i" : "på"} ${p.place}` : PICK_LABEL[p.kind] || "";
+    return { time, what: `hente ${nameOf(p.memberId) || "barnet"}${where ? " " + where : ""} ${dayWords(date)} kl. ${time}`, verb: "henter" };
+  }
+  const e = await pool.query(`select data from events where family_id = $1 and id = $2`, [familyId, targetId]);
+  if (!e.rows[0]) return null; const ev = e.rows[0].data;
+  const who = (ev.who || []).map(nameOf).filter(Boolean).join(" og ");
+  const time = ev.start || "";
+  return { time, what: `hjelpe med «${ev.title}»${who ? " for " + who : ""}${ev.place ? " (" + ev.place + ")" : ""} ${dayWords(date)}${time ? " kl. " + time : ""}`, verb: "tar den" };
+}
+
+app.post("/api/help", throttle(60, 60 * 60e3), wrap(auth), parentOnly, wrap(async (req, res) => {
+  const targetId = clean(req.body.targetId, 60), date = clean(req.body.date, 10);
+  const helperIds = Array.isArray(req.body.helperIds) ? req.body.helperIds.map((x) => clean(String(x), 40)) : [];
+  if (!targetId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "Ugyldig forespørsel." });
+  const f = await pool.query(`select settings from families where id = $1`, [req.user.family_id]);
+  const helpers = ((f.rows[0].settings || {}).helpers || []).filter((h) => helperIds.includes(h.id));
+  if (!helpers.length) return res.status(400).json({ error: "Velg minst én hjelper." });
+  const t = await helpTarget(req.user.family_id, targetId, date);
+  if (!t) return res.status(404).json({ error: "Fant ikke hentetiden eller avtalen." });
+  // Lukk tidligere åpne forespørsler for samme henting
+  await pool.query(`update help_requests set status = 'closed' where family_id = $1 and target_id = $2 and date = $3 and status = 'open'`, [req.user.family_id, targetId, date]);
+  const exp = `(($3::text || ' ' || $4::text)::timestamp at time zone 'Europe/Oslo') + interval '2 hours'`; // uten tid: gjelder ut dagen
+  const r = await pool.query(
+    `insert into help_requests (family_id, target_id, date, what, created_by, expires_at) values ($1, $2, $3, $5, $6, ${exp}) returning id, expires_at`,
+    [req.user.family_id, targetId, date, t.time || "21:59", t.what, req.user.id]
+  );
+  if (new Date(r.rows[0].expires_at) < new Date()) { await pool.query(`delete from help_requests where id = $1`, [r.rows[0].id]); return res.status(400).json({ error: "Tidspunktet har allerede vært." }); }
+  const base = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`;
+  const first = String(req.user.name).split(/\s+/)[0];
+  const links = [];
+  for (const h of helpers) {
+    const tok = crypto.randomBytes(12).toString("base64url");
+    await pool.query(`insert into help_links (token_hash, request_id, helper_id, helper_name) values ($1, $2, $3, $4)`, [sha(tok), r.rows[0].id, h.id, h.name]);
+    const url = `${base}/h/${tok}`;
+    links.push({ helperId: h.id, name: h.name, phone: h.phone, url, text: `Hei ${h.name.split(/\s+/)[0]}! Kan du ${t.what}? Svar her: ${url}\nHilsen ${first}` });
+  }
+  res.json({ id: r.rows[0].id, what: t.what, links });
+}));
+
+app.get("/api/help", wrap(auth), wrap(async (req, res) => {
+  const r = await pool.query(
+    `select r.id, r.target_id, r.date, r.what, r.status, r.accepted_helper, r.accepted_name, r.accepted_at, r.created_at, r.expires_at,
+       coalesce(json_agg(json_build_object('helperId', l.helper_id, 'name', l.helper_name, 'answer', l.answer)) filter (where l.helper_id is not null), '[]') as asked
+     from help_requests r left join help_links l on l.request_id = r.id
+     where r.family_id = $1 and r.status <> 'closed' and r.date >= to_char(now() - interval '2 days', 'YYYY-MM-DD')
+     group by r.id order by r.created_at`,
+    [req.user.family_id]
+  );
+  res.json({ requests: r.rows.map((x) => ({ id: x.id, targetId: x.target_id, date: x.date, what: x.what, status: x.status, acceptedName: x.accepted_name, acceptedAt: x.accepted_at, createdAt: x.created_at, expiresAt: x.expires_at, asked: x.asked })) });
+}));
+
+app.delete("/api/help/:id", wrap(auth), parentOnly, wrap(async (req, res) => {
+  await pool.query(`update help_requests set status = 'closed' where id::text = $1 and family_id = $2`, [clean(req.params.id, 40), req.user.family_id]);
+  res.json({ ok: true });
+}));
+
+// Offentlig: besteforeldre svarer via lenken (ingen innlogging). Viser bare den ene forespørselen.
+async function linkInfo(tok) {
+  const r = await pool.query(
+    `select l.token_hash, l.helper_id, l.helper_name, l.answer, r.id, r.what, r.status, r.accepted_helper, r.accepted_name, r.expires_at, u.name as asker
+       from help_links l join help_requests r on r.id = l.request_id left join users u on u.id = r.created_by
+      where l.token_hash = $1`, [sha(tok)]);
+  return r.rows[0] || null;
+}
+function publicView(x) {
+  const expired = new Date(x.expires_at) < new Date();
+  return {
+    helperName: x.helper_name.split(/\s+/)[0], asker: String(x.asker || "Familien").split(/\s+/)[0], what: x.what,
+    status: x.status === "accepted" ? (x.accepted_helper === x.helper_id ? "you" : "taken") : x.status === "closed" ? "closed" : expired ? "expired" : "open",
+    takenBy: x.status === "accepted" && x.accepted_helper !== x.helper_id ? String(x.accepted_name || "").split(/\s+/)[0] : "",
+    myAnswer: x.answer,
+  };
+}
+app.get("/api/public/help/:token", throttle(60, 15 * 60e3), wrap(async (req, res) => {
+  const x = await linkInfo(clean(req.params.token, 60));
+  if (!x) return res.status(404).json({ error: "Lenken finnes ikke." });
+  res.json(publicView(x));
+}));
+app.post("/api/public/help/:token", throttle(20, 15 * 60e3), wrap(async (req, res) => {
+  const tok = clean(req.params.token, 60);
+  const x = await linkInfo(tok);
+  if (!x) return res.status(404).json({ error: "Lenken finnes ikke." });
+  const v = publicView(x);
+  if (v.status === "expired" || v.status === "closed") return res.json(v);
+  const answer = req.body.answer === "yes" ? "yes" : "no";
+  if (answer === "yes") {
+    const up = await pool.query(
+      `update help_requests set status = 'accepted', accepted_helper = $2, accepted_name = $3, accepted_at = now() where id = $1 and status = 'open' and expires_at > now() returning id`,
+      [x.id, x.helper_id, x.helper_name]
+    );
+    await pool.query(`update help_links set answer = $2, answered_at = now() where token_hash = $1`, [sha(tok), up.rows[0] ? "yes" : "late"]);
+  } else {
+    if (v.status === "you") await pool.query(`update help_requests set status = 'open', accepted_helper = null, accepted_name = null, accepted_at = null where id = $1`, [x.id]);
+    await pool.query(`update help_links set answer = 'no', answered_at = now() where token_hash = $1`, [sha(tok)]);
+  }
+  res.json(publicView(await linkInfo(tok)));
+}));
+
 // ---------- Ukesoppgaver ----------
 // Uke-nøkkel «2026-W46» (ISO-uke, norsk tid)
 function weekKeyOf(dateStr) {
@@ -1140,6 +1295,7 @@ app.use("/vendor/lang", express.static(path.join(__dirname, "node_modules/@tesse
 app.get("/healthz", (req, res) => res.send("ok"));
 
 app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: PROD ? "1h" : 0 }));
+app.get("/h/:token", (req, res) => { res.setHeader("Referrer-Policy", "no-referrer"); res.setHeader("X-Robots-Tag", "noindex"); res.sendFile(path.join(__dirname, "public", "help.html")); });
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 app.use((err, req, res, next) => {
@@ -1149,7 +1305,7 @@ app.use((err, req, res, next) => {
 
 // Expired sessions/invites are cleaned up hourly
 setInterval(() => {
-  pool.query(`delete from password_resets where expires_at < now() - interval '1 day'; delete from activity where day < now() - interval '400 days'; delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); update chore_runs set photo_id = null where photo_id in (select id from photos where created_at < now() - interval '30 days'); delete from photos where created_at < now() - interval '30 days'`).catch(() => {});
+  pool.query(`delete from password_resets where expires_at < now() - interval '1 day'; delete from activity where day < now() - interval '400 days'; delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); delete from help_requests where expires_at < now() - interval '30 days'; update chore_runs set photo_id = null where photo_id in (select id from photos where created_at < now() - interval '30 days'); delete from photos where created_at < now() - interval '30 days'`).catch(() => {});
 }, 3600e3);
 
 migrate()

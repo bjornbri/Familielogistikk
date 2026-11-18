@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Kan du hjelpe? · Familielogistikk</title>
+<link rel="icon" href="/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Svarside for besteforeldre: stor tekst, to store knapper, ingen innlogging */
+:root{
+  --bg:#F1F4F3; --surface:#FFFFFF; --ink:#16302B; --muted:#5A6E69; --line:#D5DEDB;
+  --accent:#E09A12; --ok:#1E7A4C; --no:#B4332E;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root{--bg:#0E1917;--surface:#152320;--ink:#E3ECE9;--muted:#93A7A2;--line:#263834;--accent:#F2B744;--ok:#5CCB8F;--no:#F07A72;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:19px;line-height:1.45}
+main{max-width:520px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;gap:22px;justify-content:center;padding-block:calc(28px + env(safe-area-inset-top,0px)) calc(28px + env(safe-area-inset-bottom,0px));padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:700;font-size:1rem;color:var(--muted)}
+.brand span{width:28px;height:28px;border-radius:8px;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:.75rem}
+h1{margin:0;font-family:var(--f-display);font-size:clamp(1.8rem,7vw,2.4rem);line-height:1.1;letter-spacing:-.02em;text-wrap:balance}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px 22px;font-size:1.25rem}
+.q b{font-weight:700}
+.btns{display:flex;flex-direction:column;gap:12px}
+button{font:inherit;cursor:pointer;border-radius:16px;padding:18px 20px;font-weight:700;font-size:1.2rem;border:2px solid transparent;min-height:64px}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.yes{background:var(--ok);color:#fff}
+.no{background:var(--surface);color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.6}
+.done{font-size:1.2rem;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px 22px}
+.done.ok{border-color:var(--ok)}
+.small{font-size:.9rem;color:var(--muted);margin:0}
+.link{background:none;border:0;padding:6px 0;min-height:0;color:var(--muted);font-size:.95rem;text-decoration:underline;align-self:flex-start}
+</style>
+</head>
+<body>
+<main id="m">
+  <div class="brand"><span aria-hidden="true">FL</span>Familielogistikk</div>
+  <p class="small">Henter …</p>
+</main>
+<script>
+(()=>{
+  const m=document.getElementById("m");
+  const tok=location.pathname.split("/").pop();
+  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const head=`<div class="brand"><span aria-hidden="true">FL</span>Familielogistikk</div>`;
+  function show(v){
+    if(v.status==="open"){
+      m.innerHTML=`${head}<h1>Hei ${esc(v.helperName)}!</h1>
+        <div class="q">${esc(v.asker)} spør: Kan du <b>${esc(v.what)}</b>?</div>
+        ${v.myAnswer==="no"?`<p class="small">Du har svart nei. Du kan ombestemme deg.</p>`:""}
+        <div class="btns"><button class="yes" id="yes">Ja, jeg kan</button><button class="no" id="no">Nei, dessverre</button></div>
+        <p class="small">Du trenger ikke logge inn. Svaret ditt vises med en gang for familien.</p>`;
+      document.getElementById("yes").onclick=()=>answer("yes");
+      document.getElementById("no").onclick=()=>answer("no");
+    } else if(v.status==="you"){
+      m.innerHTML=`${head}<h1>Tusen takk!</h1><div class="done ok">Du har sagt ja til å <b>${esc(v.what)}</b>. ${esc(v.asker)} og familien ser nå at du tar det.</div>
+        <button class="link" id="undo">Jeg kan likevel ikke</button>`;
+      document.getElementById("undo").onclick=()=>answer("no");
+    } else if(v.status==="taken"){
+      m.innerHTML=`${head}<h1>Takk likevel!</h1><div class="done">${v.takenBy?esc(v.takenBy):"Noen andre"} har allerede sagt ja til å ${esc(v.what)}. Du trenger ikke gjøre noe.</div>`;
+    } else if(v.myAnswer==="no"&&v.status!=="expired"&&v.status!=="closed"){
+      show({...v,status:"open"});
+    } else {
+      m.innerHTML=`${head}<h1>Ikke lenger aktiv</h1><div class="done">Denne forespørselen er avsluttet eller utløpt. Du trenger ikke gjøre noe.</div>`;
+    }
+  }
+  async function answer(a){
+    m.querySelectorAll("button").forEach(b=>b.disabled=true);
+    try{
+      const r=await fetch("/api/public/help/"+encodeURIComponent(tok),{method:"POST",headers:{"Content-Type":"application/json","X-FL":"1"},body:JSON.stringify({answer:a})});
+      const v=await r.json(); if(!r.ok) throw v;
+      if(a==="no"&&v.status==="open"){ m.innerHTML=`${head}<h1>Takk for svaret</h1><div class="done">Greit! Vi har gitt beskjed om at du ikke kan denne gangen.</div><button class="link" id="re">Jeg kan likevel</button>`; document.getElementById("re").onclick=()=>answer("yes"); return; }
+      show(v);
+    }catch(e){ m.querySelectorAll("button").forEach(b=>b.disabled=false); alertBox((e&&e.error)||"Noe gikk galt. Prøv igjen."); }
+  }
+  function alertBox(t){ let p=document.getElementById("err"); if(!p){ p=document.createElement("p"); p.id="err"; p.className="small"; p.style.color="var(--no)"; m.appendChild(p); } p.textContent=t; }
+  fetch("/api/public/help/"+encodeURIComponent(tok)).then(r=>r.json().then(v=>({ok:r.ok,v}))).then(({ok,v})=>{
+    if(!ok){ m.innerHTML=`${head}<h1>Fant ikke forespørselen</h1><div class="done">Lenken virker ikke. Sjekk at hele lenken ble med, eller spør den som sendte den.</div>`; return; }
+    show(v);
+  }).catch(()=>{ m.innerHTML=`${head}<h1>Ingen forbindelse</h1><div class="done">Sjekk internett og prøv igjen.</div>`; });
+})();
+</script>
+</body>
+</html>
