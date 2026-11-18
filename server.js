@@ -875,24 +875,77 @@ app.delete("/api/help/:id", wrap(auth), parentOnly, wrap(async (req, res) => {
 // Offentlig: besteforeldre svarer via lenken (ingen innlogging). Viser bare den ene forespørselen.
 async function linkInfo(tok) {
   const r = await pool.query(
-    `select l.token_hash, l.helper_id, l.helper_name, l.answer, r.id, r.what, r.status, r.accepted_helper, r.accepted_name, r.expires_at, u.name as asker
+    `select l.token_hash, l.helper_id, l.helper_name, l.answer, r.id, r.what, r.status, r.accepted_helper, r.accepted_name, r.expires_at, r.family_id, r.target_id, r.date, u.name as asker
        from help_links l join help_requests r on r.id = l.request_id left join users u on u.id = r.created_by
       where l.token_hash = $1`, [sha(tok)]);
   return r.rows[0] || null;
 }
+function occursOnDate(e, ds) {
+  if (!e.date) return false;
+  if (e.date === ds) return true;
+  if (!e.repeat || ds < e.date) return false;
+  const diff = Math.round((Date.parse(ds + "T12:00:00Z") - Date.parse(e.date + "T12:00:00Z")) / 864e5);
+  return e.repeat === "weekly" ? diff % 7 === 0 : e.repeat === "biweekly" ? diff % 14 === 0 : false;
+}
+// Dagsplan for barnet hjelperen henter: bare det barnets avtaler, hentinger og beskjeder den dagen
+async function helperDayPlan(x) {
+  const f = await pool.query(`select members, settings from families where id = $1`, [x.family_id]);
+  const members = f.rows[0].members || []; const st = f.rows[0].settings || {};
+  const nameOf = (id) => (members.find((m) => m.id === id) || {}).name || "";
+  let kids = [], from = "";
+  if (x.target_id.startsWith("p_")) {
+    const p = (st.pickups || []).find((q) => "p_" + q.id === x.target_id); if (p) kids = [p.memberId];
+    const [y, m, d] = x.date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
+    from = (p && p.times && p.times[wd]) || "";
+  } else {
+    const e = await pool.query(`select data from events where family_id = $1 and id = $2`, [x.family_id, x.target_id]);
+    if (e.rows[0]) { kids = e.rows[0].data.who || []; from = e.rows[0].data.start || ""; }
+  }
+  if (!kids.length) return null;
+  const evs = await pool.query(`select id, data from events where family_id = $1`, [x.family_id]);
+  const conf = await pool.query(`select c.event_id, u.name from confirmations c join users u on u.id = c.user_id where c.family_id = $1 and c.date = $2`, [x.family_id, x.date]);
+  const confBy = Object.fromEntries(conf.rows.map((r) => [r.event_id, String(r.name).split(/\s+/)[0]]));
+  const items = [];
+  for (const r of evs.rows) {
+    const e = r.data;
+    if (!occursOnDate(e, x.date) || !(e.who || []).some((w) => kids.includes(w))) continue;
+    const mapsUrl = e.mapsUrl || (e.place ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent([e.place, e.address].filter(Boolean).join(", ")) : "");
+    items.push({ kind: "event", start: e.start || "", end: e.end || "", title: e.title, place: e.place || "", address: e.address || "", mapsUrl, note: e.note || "",
+      who: (e.who || []).map(nameOf).filter(Boolean).join(", "), by: confBy[r.id] || "", self: r.id === x.target_id });
+  }
+  const [y, m, d] = x.date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
+  for (const p of st.pickups || []) {
+    if (!kids.includes(p.memberId) || !(p.times && p.times[wd])) continue;
+    const label = { skole: "Skolen slutter", sfo: "SFO stenger", barnehage: "Barnehagen stenger", annet: "Henting" }[p.kind] || "Henting";
+    items.push({ kind: "pickup", start: p.times[wd], end: "", title: label, place: p.place || "",
+      mapsUrl: p.place ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.place) : "", who: nameOf(p.memberId),
+      by: "p_" + p.id === x.target_id ? "deg" : confBy["p_" + p.id] || "", self: "p_" + p.id === x.target_id });
+  }
+  const n = await pool.query(`select data from notes where family_id = $1 and data->>'date' = $2`, [x.family_id, x.date]);
+  const notes = n.rows.map((r) => r.data).filter((d0) => kids.includes(d0.who)).map((d0) => ({ from: nameOf(d0.who), text: d0.text }));
+  items.sort((a, b) => (a.start || "00:00").localeCompare(b.start || "00:00"));
+  return { names: kids.map(nameOf).filter(Boolean).join(" og "), from, items, notes };
+}
 function publicView(x) {
-  const expired = new Date(x.expires_at) < new Date();
+  // Den som har sagt ja, ser forespørselen og dagsplanen ut dagen
+  const mine = x.status === "accepted" && x.accepted_helper === x.helper_id;
+  const expired = mine ? oslo(new Date()).date > x.date : new Date(x.expires_at) < new Date();
   return {
     helperName: x.helper_name.split(/\s+/)[0], asker: String(x.asker || "Familien").split(/\s+/)[0], what: x.what,
-    status: x.status === "accepted" ? (x.accepted_helper === x.helper_id ? "you" : "taken") : x.status === "closed" ? "closed" : expired ? "expired" : "open",
+    status: x.status === "accepted" ? (mine ? (expired ? "expired" : "you") : "taken") : x.status === "closed" ? "closed" : expired ? "expired" : "open",
     takenBy: x.status === "accepted" && x.accepted_helper !== x.helper_id ? String(x.accepted_name || "").split(/\s+/)[0] : "",
     myAnswer: x.answer,
   };
 }
+async function publicWithPlan(x) {
+  const v = publicView(x);
+  if (v.status === "you") v.plan = await helperDayPlan(x);
+  return v;
+}
 app.get("/api/public/help/:token", throttle(60, 15 * 60e3), wrap(async (req, res) => {
   const x = await linkInfo(clean(req.params.token, 60));
   if (!x) return res.status(404).json({ error: "Lenken finnes ikke." });
-  res.json(publicView(x));
+  res.json(await publicWithPlan(x));
 }));
 app.post("/api/public/help/:token", throttle(20, 15 * 60e3), wrap(async (req, res) => {
   const tok = clean(req.params.token, 60);
@@ -911,7 +964,7 @@ app.post("/api/public/help/:token", throttle(20, 15 * 60e3), wrap(async (req, re
     if (v.status === "you") await pool.query(`update help_requests set status = 'open', accepted_helper = null, accepted_name = null, accepted_at = null where id = $1`, [x.id]);
     await pool.query(`update help_links set answer = 'no', answered_at = now() where token_hash = $1`, [sha(tok)]);
   }
-  res.json(publicView(await linkInfo(tok)));
+  res.json(await publicWithPlan(await linkInfo(tok)));
 }));
 
 // ---------- Ukesoppgaver ----------

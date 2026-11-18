@@ -35,6 +35,23 @@ button:disabled{opacity:.6}
 .done{font-size:1.2rem;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px 22px}
 .done.ok{border-color:var(--ok)}
 .small{font-size:.9rem;color:var(--muted);margin:0}
+.plan{display:flex;flex-direction:column;gap:10px}
+.plan h2{margin:6px 0 0;font-family:var(--f-display);font-size:1.4rem}
+.plan .sub{margin:0;color:var(--muted);font-size:.95rem}
+.it{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:grid;grid-template-columns:4.2rem minmax(0,1fr);gap:4px 12px}
+.it.self{border:2px solid var(--ok)}
+.it.past{opacity:.5}
+.it .t{font-weight:700;font-size:1.1rem;font-variant-numeric:tabular-nums}
+.it .t small{display:block;font-weight:400;font-size:.85rem;color:var(--muted)}
+.it .b{min-width:0;display:flex;flex-direction:column;gap:4px}
+.it .b b{font-size:1.1rem;overflow-wrap:break-word}
+.it .b span{color:var(--muted);font-size:.95rem;overflow-wrap:break-word}
+.it .tag{align-self:flex-start;border-radius:999px;padding:2px 10px;font-size:.85rem;font-weight:700}
+.tag.you{background:color-mix(in srgb,var(--ok) 16%,var(--surface));color:var(--ok)}
+.tag.other{background:var(--bg);color:var(--ink)}
+.tag.none{background:color-mix(in srgb,var(--accent) 18%,var(--surface));color:var(--ink)}
+.it a{color:var(--ink);font-weight:700;font-size:.95rem}
+.nt{background:color-mix(in srgb,var(--accent) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));border-radius:14px;padding:12px 16px;font-size:1rem}
 .link{background:none;border:0;padding:6px 0;min-height:0;color:var(--muted);font-size:.95rem;text-decoration:underline;align-self:flex-start}
 </style>
 </head>
@@ -60,6 +77,7 @@ button:disabled{opacity:.6}
       document.getElementById("no").onclick=()=>answer("no");
     } else if(v.status==="you"){
       m.innerHTML=`${head}<h1>Tusen takk!</h1><div class="done ok">Du har sagt ja til å <b>${esc(v.what)}</b>. ${esc(v.asker)} og familien ser nå at du tar det.</div>
+        ${planHtml(v.plan)}
         <button class="link" id="undo">Jeg kan likevel ikke</button>`;
       document.getElementById("undo").onclick=()=>answer("no");
     } else if(v.status==="taken"){
@@ -69,6 +87,25 @@ button:disabled{opacity:.6}
     } else {
       m.innerHTML=`${head}<h1>Ikke lenger aktiv</h1><div class="done">Denne forespørselen er avsluttet eller utløpt. Du trenger ikke gjøre noe.</div>`;
     }
+  }
+  // Dagsplan for barnet: hva skjer videre etter hentingen?
+  function planHtml(p){
+    if(!p||!p.items||!p.items.length) return "";
+    const now=new Date(), nm=now.getHours()*60+now.getMinutes();
+    const toMin=t=>{ const [h,mm]=String(t).split(":").map(Number); return h*60+mm; };
+    const after=p.items.filter(i=>!p.from||!i.start||i.start>=p.from);
+    const before=p.items.length-after.length;
+    const rows=after.map(i=>{
+      const tag=i.self?`<span class="tag you">Du ${i.kind==="pickup"?"henter":"tar den"}</span>`:i.by?`<span class="tag other">${esc(i.by)} tar den</span>`:(i.kind==="event"?`<span class="tag none">Ingen har tatt denne ennå</span>`:"");
+      const place=[i.place,i.address].filter(Boolean).join(", ");
+      return `<div class="it ${i.self?"self":""}"><span class="t">${esc(i.start||"Hele dagen")}${i.end?`<small>til ${esc(i.end)}</small>`:""}</span>
+        <span class="b"><b>${esc(i.title)}</b>${place?`<span>${esc(place)}</span>`:""}${i.note?`<span>${esc(i.note)}</span>`:""}${i.mapsUrl?`<a href="${esc(i.mapsUrl)}" target="_blank" rel="noopener">Åpne i kart ↗</a>`:""}${tag}</span></div>`;
+    }).join("");
+    const notes=(p.notes||[]).map(n=>`<div class="nt"><b>${esc(n.from)}:</b> ${esc(n.text)}</div>`).join("");
+    const next=after.filter(i=>!i.self&&i.kind==="event");
+    const sub=next.length?`Etter hentingen har ${esc(p.names)} ${next.length===1?"én avtale til":next.length+" avtaler til"} i dag.`:`${esc(p.names)} har ingen flere avtaler i dag, så det er rett hjem.`;
+    const poss=/[sxz]$/i.test(p.names)?p.names+"'":p.names+"s";
+    return `<section class="plan"><h2>${esc(poss)} dag videre</h2><p class="sub">${sub}</p>${notes}${rows}${before?`<p class="sub">${before} ${before===1?"avtale":"avtaler"} tidligere i dag vises ikke.</p>`:""}</section>`;
   }
   async function answer(a){
     m.querySelectorAll("button").forEach(b=>b.disabled=true);

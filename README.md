@@ -28,6 +28,7 @@ En hentetid som ingen har bekreftet, markeres gult, og rødt fra 1,5 time før.
 - Lenken (`/h/…`) åpner en enkel side med **«Ja, jeg kan»** / **«Nei, dessverre»**. Ingen innlogging.
 - Spør du flere, får den som svarer ja først oppdraget. Appen viser «✓ Bestemor henter» og gir beskjed når noen svarer.
 - Lenken viser bare den ene forespørselen og slutter å virke 2 timer etter hentetiden, eller når forespørselen avbrytes.
+- Når hjelperen har sagt ja, viser lenken **barnets dag videre** ut dagen: avtaler etter hentingen med tid, sted, kartlenke og notat, hvem som tar dem, og barnets beskjeder. Bare det barnet, ingen andre i familien.
 
 ## Ukesoppgaver
 
