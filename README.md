@@ -25,6 +25,7 @@ En hentetid som ingen har bekreftet, markeres gult, og rødt fra 1,5 time før.
 
 - Legg inn **hjelpere** med navn og mobil under **Familie** (eller direkte første gang du spør).
 - Ved en hentetid eller avtale: **«Spør om hjelp»** → velg hvem → **Send SMS**. Meldinger åpnes med ferdig tekst og en personlig lenke.
+- Kryss av flere hentinger eller avtaler samme dag for å spørre om alt i **én SMS** («hente Leah på SFO kl. 15:00 og Oskar i barnehagen kl. 16:45 i dag»).
 - Lenken (`/h/…`) åpner en enkel side med **«Ja, jeg kan»** / **«Nei, dessverre»**. Ingen innlogging.
 - Spør du flere, får den som svarer ja først oppdraget. Appen viser «✓ Bestemor henter» og gir beskjed når noen svarer.
 - Lenken viser bare den ene forespørselen og slutter å virke 2 timer etter hentetiden, eller når forespørselen avbrytes.

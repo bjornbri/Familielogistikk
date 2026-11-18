@@ -147,6 +147,7 @@ async function migrate() {
       created_at timestamptz not null default now(),
       expires_at timestamptz not null
     );
+    alter table help_requests add column if not exists targets jsonb;
     create table if not exists help_links (
       token_hash text primary key,
       request_id uuid not null references help_requests(id) on delete cascade,
@@ -817,30 +818,45 @@ async function helpTarget(familyId, targetId, date) {
     const [y, m, d] = date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
     const time = p.times && p.times[wd]; if (!time) return null;
     const where = p.place ? `${p.kind === "barnehage" ? "i" : "på"} ${p.place}` : PICK_LABEL[p.kind] || "";
-    return { time, what: `hente ${nameOf(p.memberId) || "barnet"}${where ? " " + where : ""} ${dayWords(date)} kl. ${time}`, verb: "henter" };
+    const who = nameOf(p.memberId) || "barnet";
+    return { time, pickup: true, core: `${who}${where ? " " + where : ""} kl. ${time}`, what: `hente ${who}${where ? " " + where : ""} ${dayWords(date)} kl. ${time}`, verb: "henter" };
   }
   const e = await pool.query(`select data from events where family_id = $1 and id = $2`, [familyId, targetId]);
   if (!e.rows[0]) return null; const ev = e.rows[0].data;
   const who = (ev.who || []).map(nameOf).filter(Boolean).join(" og ");
   const time = ev.start || "";
-  return { time, what: `hjelpe med «${ev.title}»${who ? " for " + who : ""}${ev.place ? " (" + ev.place + ")" : ""} ${dayWords(date)}${time ? " kl. " + time : ""}`, verb: "tar den" };
+  const core = `«${ev.title}»${who ? " for " + who : ""}${ev.place ? " (" + ev.place + ")" : ""}${time ? " kl. " + time : ""}`;
+  return { time, pickup: false, core, what: `hjelpe med «${ev.title}»${who ? " for " + who : ""}${ev.place ? " (" + ev.place + ")" : ""} ${dayWords(date)}${time ? " kl. " + time : ""}`, verb: "tar den" };
 }
 
 app.post("/api/help", throttle(60, 60 * 60e3), wrap(auth), parentOnly, wrap(async (req, res) => {
-  const targetId = clean(req.body.targetId, 60), date = clean(req.body.date, 10);
+  const date = clean(req.body.date, 10);
+  const targetIds = [...new Set((Array.isArray(req.body.targetIds) ? req.body.targetIds : [req.body.targetId]).map((x) => clean(String(x || ""), 60)).filter(Boolean))].slice(0, 8);
   const helperIds = Array.isArray(req.body.helperIds) ? req.body.helperIds.map((x) => clean(String(x), 40)) : [];
-  if (!targetId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "Ugyldig forespørsel." });
+  if (!targetIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "Velg minst én henting eller avtale." });
+  const targetId = targetIds[0];
   const f = await pool.query(`select settings from families where id = $1`, [req.user.family_id]);
   const helpers = ((f.rows[0].settings || {}).helpers || []).filter((h) => helperIds.includes(h.id));
   if (!helpers.length) return res.status(400).json({ error: "Velg minst én hjelper." });
-  const t = await helpTarget(req.user.family_id, targetId, date);
-  if (!t) return res.status(404).json({ error: "Fant ikke hentetiden eller avtalen." });
-  // Lukk tidligere åpne forespørsler for samme henting
-  await pool.query(`update help_requests set status = 'closed' where family_id = $1 and target_id = $2 and date = $3 and status = 'open'`, [req.user.family_id, targetId, date]);
+  const parts = [];
+  for (const id of targetIds) { const x = await helpTarget(req.user.family_id, id, date); if (!x) return res.status(404).json({ error: "Fant ikke en av hentetidene eller avtalene." }); parts.push(x); }
+  parts.sort((a, b) => (a.time || "99").localeCompare(b.time || "99"));
+  // Én tekst for alt: «hente Leah på SFO kl. 15:00 og Oskar i barnehagen kl. 16:45 i dag»
+  const join = (l) => (l.length < 2 ? l.join("") : l.slice(0, -1).join(", ") + " og " + l[l.length - 1]);
+  const pick = parts.filter((x) => x.pickup), other = parts.filter((x) => !x.pickup);
+  const phrases = [];
+  if (pick.length) phrases.push("hente " + join(pick.map((x) => x.core)));
+  if (other.length) phrases.push("hjelpe med " + join(other.map((x) => x.core)));
+  const t = parts.length === 1 ? parts[0] : { time: parts.map((x) => x.time).filter(Boolean).sort().pop() || "", what: join(phrases) + " " + dayWords(date) };
+  // Lukk tidligere åpne forespørsler for de samme hentingene/avtalene
+  await pool.query(
+    `update help_requests set status = 'closed' where family_id = $1 and date = $2 and status = 'open'
+       and (target_id = any($3::text[]) or exists (select 1 from jsonb_array_elements_text(coalesce(targets, '[]')) x where x = any($3::text[])))`,
+    [req.user.family_id, date, targetIds]);
   const exp = `(($3::text || ' ' || $4::text)::timestamp at time zone 'Europe/Oslo') + interval '2 hours'`; // uten tid: gjelder ut dagen
   const r = await pool.query(
-    `insert into help_requests (family_id, target_id, date, what, created_by, expires_at) values ($1, $2, $3, $5, $6, ${exp}) returning id, expires_at`,
-    [req.user.family_id, targetId, date, t.time || "21:59", t.what, req.user.id]
+    `insert into help_requests (family_id, target_id, date, what, created_by, expires_at, targets) values ($1, $2, $3, $5, $6, ${exp}, $7) returning id, expires_at`,
+    [req.user.family_id, targetId, date, t.time || "21:59", t.what, req.user.id, JSON.stringify(targetIds)]
   );
   if (new Date(r.rows[0].expires_at) < new Date()) { await pool.query(`delete from help_requests where id = $1`, [r.rows[0].id]); return res.status(400).json({ error: "Tidspunktet har allerede vært." }); }
   const base = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`;
@@ -857,14 +873,14 @@ app.post("/api/help", throttle(60, 60 * 60e3), wrap(auth), parentOnly, wrap(asyn
 
 app.get("/api/help", wrap(auth), wrap(async (req, res) => {
   const r = await pool.query(
-    `select r.id, r.target_id, r.date, r.what, r.status, r.accepted_helper, r.accepted_name, r.accepted_at, r.created_at, r.expires_at,
+    `select r.id, r.target_id, r.targets, r.date, r.what, r.status, r.accepted_helper, r.accepted_name, r.accepted_at, r.created_at, r.expires_at,
        coalesce(json_agg(json_build_object('helperId', l.helper_id, 'name', l.helper_name, 'answer', l.answer)) filter (where l.helper_id is not null), '[]') as asked
      from help_requests r left join help_links l on l.request_id = r.id
      where r.family_id = $1 and r.status <> 'closed' and r.date >= to_char(now() - interval '2 days', 'YYYY-MM-DD')
      group by r.id order by r.created_at`,
     [req.user.family_id]
   );
-  res.json({ requests: r.rows.map((x) => ({ id: x.id, targetId: x.target_id, date: x.date, what: x.what, status: x.status, acceptedName: x.accepted_name, acceptedAt: x.accepted_at, createdAt: x.created_at, expiresAt: x.expires_at, asked: x.asked })) });
+  res.json({ requests: r.rows.map((x) => ({ id: x.id, targetId: x.target_id, targets: x.targets || [x.target_id], date: x.date, what: x.what, status: x.status, acceptedName: x.accepted_name, acceptedAt: x.accepted_at, createdAt: x.created_at, expiresAt: x.expires_at, asked: x.asked })) });
 }));
 
 app.delete("/api/help/:id", wrap(auth), parentOnly, wrap(async (req, res) => {
@@ -875,7 +891,7 @@ app.delete("/api/help/:id", wrap(auth), parentOnly, wrap(async (req, res) => {
 // Offentlig: besteforeldre svarer via lenken (ingen innlogging). Viser bare den ene forespørselen.
 async function linkInfo(tok) {
   const r = await pool.query(
-    `select l.token_hash, l.helper_id, l.helper_name, l.answer, r.id, r.what, r.status, r.accepted_helper, r.accepted_name, r.expires_at, r.family_id, r.target_id, r.date, u.name as asker
+    `select l.token_hash, l.helper_id, l.helper_name, l.answer, r.id, r.what, r.status, r.accepted_helper, r.accepted_name, r.expires_at, r.family_id, r.target_id, r.targets, r.date, u.name as asker
        from help_links l join help_requests r on r.id = l.request_id left join users u on u.id = r.created_by
       where l.token_hash = $1`, [sha(tok)]);
   return r.rows[0] || null;
@@ -892,15 +908,19 @@ async function helperDayPlan(x) {
   const f = await pool.query(`select members, settings from families where id = $1`, [x.family_id]);
   const members = f.rows[0].members || []; const st = f.rows[0].settings || {};
   const nameOf = (id) => (members.find((m) => m.id === id) || {}).name || "";
-  let kids = [], from = "";
-  if (x.target_id.startsWith("p_")) {
-    const p = (st.pickups || []).find((q) => "p_" + q.id === x.target_id); if (p) kids = [p.memberId];
-    const [y, m, d] = x.date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
-    from = (p && p.times && p.times[wd]) || "";
-  } else {
-    const e = await pool.query(`select data from events where family_id = $1 and id = $2`, [x.family_id, x.target_id]);
-    if (e.rows[0]) { kids = e.rows[0].data.who || []; from = e.rows[0].data.start || ""; }
+  const targets = x.targets || [x.target_id];
+  const kidSet = new Set(); const froms = [];
+  for (const tid of targets) {
+    if (tid.startsWith("p_")) {
+      const p = (st.pickups || []).find((q) => "p_" + q.id === tid); if (p) kidSet.add(p.memberId);
+      const [y, m, d] = x.date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
+      if (p && p.times && p.times[wd]) froms.push(p.times[wd]);
+    } else {
+      const e = await pool.query(`select data from events where family_id = $1 and id = $2`, [x.family_id, tid]);
+      if (e.rows[0]) { (e.rows[0].data.who || []).forEach((w) => kidSet.add(w)); if (e.rows[0].data.start) froms.push(e.rows[0].data.start); }
+    }
   }
+  const kids = [...kidSet]; const from = froms.sort()[0] || "";
   if (!kids.length) return null;
   const evs = await pool.query(`select id, data from events where family_id = $1`, [x.family_id]);
   const conf = await pool.query(`select c.event_id, u.name from confirmations c join users u on u.id = c.user_id where c.family_id = $1 and c.date = $2`, [x.family_id, x.date]);
@@ -911,7 +931,7 @@ async function helperDayPlan(x) {
     if (!occursOnDate(e, x.date) || !(e.who || []).some((w) => kids.includes(w))) continue;
     const mapsUrl = e.mapsUrl || (e.place ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent([e.place, e.address].filter(Boolean).join(", ")) : "");
     items.push({ kind: "event", start: e.start || "", end: e.end || "", title: e.title, place: e.place || "", address: e.address || "", mapsUrl, note: e.note || "",
-      who: (e.who || []).map(nameOf).filter(Boolean).join(", "), by: confBy[r.id] || "", self: r.id === x.target_id });
+      who: (e.who || []).map(nameOf).filter(Boolean).join(", "), by: targets.includes(r.id) ? "deg" : confBy[r.id] || "", self: targets.includes(r.id) });
   }
   const [y, m, d] = x.date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
   for (const p of st.pickups || []) {
@@ -919,7 +939,7 @@ async function helperDayPlan(x) {
     const label = { skole: "Skolen slutter", sfo: "SFO stenger", barnehage: "Barnehagen stenger", annet: "Henting" }[p.kind] || "Henting";
     items.push({ kind: "pickup", start: p.times[wd], end: "", title: label, place: p.place || "",
       mapsUrl: p.place ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.place) : "", who: nameOf(p.memberId),
-      by: "p_" + p.id === x.target_id ? "deg" : confBy["p_" + p.id] || "", self: "p_" + p.id === x.target_id });
+      by: targets.includes("p_" + p.id) ? "deg" : confBy["p_" + p.id] || "", self: targets.includes("p_" + p.id) });
   }
   const n = await pool.query(`select data from notes where family_id = $1 and data->>'date' = $2`, [x.family_id, x.date]);
   const notes = n.rows.map((r) => r.data).filter((d0) => kids.includes(d0.who)).map((d0) => ({ from: nameOf(d0.who), text: d0.text }));

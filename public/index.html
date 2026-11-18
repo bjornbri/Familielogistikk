@@ -1200,7 +1200,7 @@ function pickupsOn(d){
     return {id:"p_"+p.id,memberId:p.memberId,m,kind:p.kind,place:p.place||"",time:p.times[wd],title:(m?m.name:"Barn")+": "+(PICK_KIND[p.kind]||"Henting")}; })
     .filter(p=>!S.hidden.has(p.memberId)).sort((a,b)=>a.time.localeCompare(b.time));
 }
-function helpFor(id,ds){ const l=(S.help||[]).filter(r=>r.targetId===id&&r.date===ds&&r.status!=="closed"); return l[l.length-1]||null; }
+function helpFor(id,ds){ const l=(S.help||[]).filter(r=>(r.targets||[r.targetId]).includes(id)&&r.date===ds&&r.status!=="closed"); return l[l.length-1]||null; }
 function helperPill(r,verb){ return `<button class="conf on helper" data-help="${esc(r.id)}" aria-label="${esc(r.acceptedName)} ${verb}. Trykk for detaljer"><span class="ck" aria-hidden="true">✓</span>${esc(String(r.acceptedName||"").split(" ")[0])} ${verb}</button>`; }
 function askLine(id,ds,c){
   const r=helpFor(id,ds);
@@ -1410,11 +1410,18 @@ const smsHref=(phone,text)=>`sms:${phone}${isApple()?"&":"?"}body=${encodeURICom
 let helpCtx=null;
 function openAskHelp(id,ds){
   helpCtx={id,ds}; const d=$("#dlg-help"); $("#help-h").textContent="Spør om hjelp";
-  const pk=id.startsWith("p_")?pickupsOn(parseISO(ds)).find(p=>p.id===id):null; const ev=pk?null:S.events.find(e=>e.id===id);
-  const what=pk?`${pk.m?pk.m.name:"Barnet"} · ${PICK_KIND[pk.kind]||"Henting"} kl. ${pk.time}${pk.place?" · "+pk.place:""}`:ev?`${ev.title}${ev.start?" kl. "+ev.start:""}`:"";
-  const dayTxt=cap(fDayLong.format(parseISO(ds)));
+  const day=parseISO(ds), isT=ds===iso(today()), nowM=new Date().getHours()*60+new Date().getMinutes();
+  // Alt den dagen som ingen har tatt ennå kan tas med i samme SMS
+  const open=(x,t)=>x.id===id||(!confOf(x,ds)&&!helpFor(x.id,ds)&&!(isT&&t&&toMin(t)<nowM));
+  const cands=[
+    ...pickupsOn(day).filter(p=>open(p,p.time)).map(p=>({id:p.id,t:p.time,label:`${p.m?p.m.name:"Barn"} · ${PICK_KIND[p.kind]||"Henting"}${p.place?" · "+p.place:""}`})),
+    ...eventsOn(day).filter(e=>open(e,e.start)).map(e=>({id:e.id,t:e.start,label:`${e.title}${whoNames(e)?" · "+whoNames(e):""}`}))
+  ].sort((a,b)=>(a.t||"99").localeCompare(b.t||"99"));
+  const dayTxt=cap(fDayLong.format(day));
   const hs=S.helpers||[];
-  $("#help-body").innerHTML=`<div class="hwhat"><b>${esc(what)}</b><br><small style="color:var(--muted)">${esc(dayTxt)}</small></div>
+  $("#help-body").innerHTML=`<span style="font-size:.8rem;font-weight:700;color:var(--muted)">Hva trenger du hjelp med? <span style="font-weight:400">${esc(dayTxt)}</span></span>
+    <div class="hpick">${cands.map(c=>`<label><input type="checkbox" data-ht="${esc(c.id)}" ${c.id===id?"checked":""}> <span><b style="font-family:var(--f-mono)">${esc(c.t||"–")}</b> ${esc(c.label)}</span></label>`).join("")}</div>
+    ${cands.length>1?`<p style="margin:0;font-size:.85rem;color:var(--muted)">Kryss av flere for å spørre om alt i samme SMS.</p>`:""}
     ${hs.length?`<span style="font-size:.8rem;font-weight:700;color:var(--muted)">Hvem vil du spørre?</span><div class="hpick">${hs.map(h=>`<label><input type="checkbox" data-hh="${esc(h.id)}" checked> <span><b>${esc(h.name)}</b> <small style="color:var(--muted);font-family:var(--f-mono)">${esc(h.phone)}</small></span></label>`).join("")}</div>
       <p style="margin:0;font-size:.85rem;color:var(--muted)">Spør du flere, får den som svarer ja først oppdraget.</p>`
     :`<p style="margin:0">Du har ingen hjelpere ennå. Legg inn besteforeldre eller andre du kan spørre:</p>
@@ -1434,7 +1441,9 @@ async function sendAskHelp(){
     const ids=(S.helpers.length&&document.querySelector("[data-hh]"))?[...document.querySelectorAll("[data-hh]:checked")].map(x=>x.dataset.hh):S.helpers.map(h=>h.id);
     if(!ids.length){ err.textContent="Velg minst én hjelper."; err.hidden=false; return; }
     $("#help-go").disabled=true;
-    const r=await api("/api/help",{method:"POST",body:{targetId:helpCtx.id,date:helpCtx.ds,helperIds:ids}});
+    const tids=[...document.querySelectorAll("[data-ht]:checked")].map(x=>x.dataset.ht);
+    if(!tids.length){ err.textContent="Velg minst én henting eller avtale."; err.hidden=false; $("#help-go").disabled=false; return; }
+    const r=await api("/api/help",{method:"POST",body:{targetIds:tids,date:helpCtx.ds,helperIds:ids}});
     showSendLinks(r); await loadEvents();
   }catch(e){ if(e.status!==401){ err.textContent=e.error; err.hidden=false; } const g=$("#help-go"); if(g) g.disabled=false; }
 }

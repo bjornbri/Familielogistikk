@@ -91,6 +91,7 @@ button:disabled{opacity:.6}
   // Dagsplan for barnet: hva skjer videre etter hentingen?
   function planHtml(p){
     if(!p||!p.items||!p.items.length) return "";
+    p.many=/ og /.test(p.names||"");
     const now=new Date(), nm=now.getHours()*60+now.getMinutes();
     const toMin=t=>{ const [h,mm]=String(t).split(":").map(Number); return h*60+mm; };
     const after=p.items.filter(i=>!p.from||!i.start||i.start>=p.from);
@@ -99,13 +100,13 @@ button:disabled{opacity:.6}
       const tag=i.self?`<span class="tag you">Du ${i.kind==="pickup"?"henter":"tar den"}</span>`:i.by?`<span class="tag other">${esc(i.by)} tar den</span>`:(i.kind==="event"?`<span class="tag none">Ingen har tatt denne ennå</span>`:"");
       const place=[i.place,i.address].filter(Boolean).join(", ");
       return `<div class="it ${i.self?"self":""}"><span class="t">${esc(i.start||"Hele dagen")}${i.end?`<small>til ${esc(i.end)}</small>`:""}</span>
-        <span class="b"><b>${esc(i.title)}</b>${place?`<span>${esc(place)}</span>`:""}${i.note?`<span>${esc(i.note)}</span>`:""}${i.mapsUrl?`<a href="${esc(i.mapsUrl)}" target="_blank" rel="noopener">Åpne i kart ↗</a>`:""}${tag}</span></div>`;
+        <span class="b"><b>${p.many&&i.who?esc(i.who)+": ":""}${esc(i.title)}</b>${place?`<span>${esc(place)}</span>`:""}${i.note?`<span>${esc(i.note)}</span>`:""}${i.mapsUrl?`<a href="${esc(i.mapsUrl)}" target="_blank" rel="noopener">Åpne i kart ↗</a>`:""}${tag}</span></div>`;
     }).join("");
     const notes=(p.notes||[]).map(n=>`<div class="nt"><b>${esc(n.from)}:</b> ${esc(n.text)}</div>`).join("");
     const next=after.filter(i=>!i.self&&i.kind==="event");
-    const sub=next.length?`Etter hentingen har ${esc(p.names)} ${next.length===1?"én avtale til":next.length+" avtaler til"} i dag.`:`${esc(p.names)} har ingen flere avtaler i dag, så det er rett hjem.`;
+    const sub=next.length?`Etter hentingen ${p.many?"er det":"har "+esc(p.names)} ${next.length===1?"én avtale til":next.length+" avtaler til"} i dag.`:`${p.many?"Ingen":esc(p.names)+" har ingen"} flere avtaler i dag, så det er rett hjem.`;
     const poss=/[sxz]$/i.test(p.names)?p.names+"'":p.names+"s";
-    return `<section class="plan"><h2>${esc(poss)} dag videre</h2><p class="sub">${sub}</p>${notes}${rows}${before?`<p class="sub">${before} ${before===1?"avtale":"avtaler"} tidligere i dag vises ikke.</p>`:""}</section>`;
+    return `<section class="plan"><h2>${p.many?"Dagen videre for "+esc(p.names):esc(poss)+" dag videre"}</h2><p class="sub">${sub}</p>${notes}${rows}${before?`<p class="sub">${before} ${before===1?"avtale":"avtaler"} tidligere i dag vises ikke.</p>`:""}</section>`;
   }
   async function answer(a){
     m.querySelectorAll("button").forEach(b=>b.disabled=true);
