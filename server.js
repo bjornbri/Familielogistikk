@@ -156,6 +156,14 @@ async function migrate() {
       answer text,
       answered_at timestamptz
     );
+    create table if not exists skips (
+      family_id uuid not null references families(id) on delete cascade,
+      target_id text not null,
+      date text not null,
+      user_id uuid references users(id) on delete set null,
+      created_at timestamptz not null default now(),
+      primary key (family_id, target_id, date)
+    );
     create table if not exists confirmations (
       family_id uuid not null references families(id) on delete cascade,
       event_id text not null,
@@ -615,10 +623,26 @@ app.get("/api/events", wrap(auth), wrap(async (req, res) => {
       where c.family_id = $1 and c.date >= to_char(now() - interval '14 days', 'YYYY-MM-DD')`,
     [req.user.family_id]
   );
+  const sk = await pool.query(`select target_id, date from skips where family_id = $1 and date >= to_char(now() - interval '14 days', 'YYYY-MM-DD')`, [req.user.family_id]);
   res.json({
+    skips: sk.rows.map((r) => ({ targetId: r.target_id, date: r.date })),
     events: rows.map((r) => ({ id: r.id, ...r.data })),
     confirmations: c.rows.map((r) => ({ eventId: r.event_id, date: r.date, userId: r.user_id, name: r.name, at: r.created_at })),
   });
+}));
+
+// Fjern for én dag (sykdom, avlyst): skjuler bare denne forekomsten, faste avtaler fremover er uendret
+app.post("/api/skips", wrap(auth), wrap(async (req, res) => {
+  const targetId = clean(req.body.targetId, 60), date = clean(req.body.date, 10);
+  if (!targetId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "Ugyldig avtale." });
+  await pool.query(`insert into skips (family_id, target_id, date, user_id) values ($1, $2, $3, $4) on conflict do nothing`, [req.user.family_id, targetId, date, req.user.id]);
+  // Åpne forespørsler om hjelp som bare gjaldt denne, lukkes
+  await pool.query(`update help_requests set status = 'closed' where family_id = $1 and date = $2 and status <> 'closed' and coalesce(targets, jsonb_build_array(target_id)) = jsonb_build_array($3::text)`, [req.user.family_id, date, targetId]);
+  res.json({ ok: true });
+}));
+app.delete("/api/skips", wrap(auth), wrap(async (req, res) => {
+  await pool.query(`delete from skips where family_id = $1 and target_id = $2 and date = $3`, [req.user.family_id, clean(String(req.query.targetId || ""), 60), clean(String(req.query.date || ""), 10)]);
+  res.json({ ok: true });
 }));
 
 // Bekreftelse: «jeg tar den» for én avtale på én dag (virker også for gjentakelser og abonnement)
@@ -923,19 +947,21 @@ async function helperDayPlan(x) {
   const kids = [...kidSet]; const from = froms.sort()[0] || "";
   if (!kids.length) return null;
   const evs = await pool.query(`select id, data from events where family_id = $1`, [x.family_id]);
+  const sk = await pool.query(`select target_id from skips where family_id = $1 and date = $2`, [x.family_id, x.date]);
+  const skipped = new Set(sk.rows.map((r) => r.target_id));
   const conf = await pool.query(`select c.event_id, u.name from confirmations c join users u on u.id = c.user_id where c.family_id = $1 and c.date = $2`, [x.family_id, x.date]);
   const confBy = Object.fromEntries(conf.rows.map((r) => [r.event_id, String(r.name).split(/\s+/)[0]]));
   const items = [];
   for (const r of evs.rows) {
     const e = r.data;
-    if (!occursOnDate(e, x.date) || !(e.who || []).some((w) => kids.includes(w))) continue;
+    if (skipped.has(r.id) || !occursOnDate(e, x.date) || !(e.who || []).some((w) => kids.includes(w))) continue;
     const mapsUrl = e.mapsUrl || (e.place ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent([e.place, e.address].filter(Boolean).join(", ")) : "");
     items.push({ kind: "event", start: e.start || "", end: e.end || "", title: e.title, place: e.place || "", address: e.address || "", mapsUrl, note: e.note || "",
       who: (e.who || []).map(nameOf).filter(Boolean).join(", "), by: targets.includes(r.id) ? "deg" : confBy[r.id] || "", self: targets.includes(r.id) });
   }
   const [y, m, d] = x.date.split("-").map(Number); const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay() || 7;
   for (const p of st.pickups || []) {
-    if (!kids.includes(p.memberId) || !(p.times && p.times[wd])) continue;
+    if (!kids.includes(p.memberId) || !(p.times && p.times[wd]) || skipped.has("p_" + p.id)) continue;
     const label = { skole: "Skolen slutter", sfo: "SFO stenger", barnehage: "Barnehagen stenger", annet: "Henting" }[p.kind] || "Henting";
     items.push({ kind: "pickup", start: p.times[wd], end: "", title: label, place: p.place || "",
       mapsUrl: p.place ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.place) : "", who: nameOf(p.memberId),
@@ -1378,7 +1404,7 @@ app.use((err, req, res, next) => {
 
 // Expired sessions/invites are cleaned up hourly
 setInterval(() => {
-  pool.query(`delete from password_resets where expires_at < now() - interval '1 day'; delete from activity where day < now() - interval '400 days'; delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); delete from help_requests where expires_at < now() - interval '30 days'; update chore_runs set photo_id = null where photo_id in (select id from photos where created_at < now() - interval '30 days'); delete from photos where created_at < now() - interval '30 days'`).catch(() => {});
+  pool.query(`delete from password_resets where expires_at < now() - interval '1 day'; delete from activity where day < now() - interval '400 days'; delete from sessions where expires_at < now(); delete from invites where expires_at < now() - interval '30 days'; delete from notes where data->>'date' < to_char(now() - interval '30 days', 'YYYY-MM-DD'); delete from confirmations where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); delete from help_requests where expires_at < now() - interval '30 days'; delete from skips where date < to_char(now() - interval '60 days', 'YYYY-MM-DD'); update chore_runs set photo_id = null where photo_id in (select id from photos where created_at < now() - interval '30 days'); delete from photos where created_at < now() - interval '30 days'`).catch(() => {});
 }, 3600e3);
 
 migrate()

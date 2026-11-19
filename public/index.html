@@ -373,6 +373,27 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .ans{font-size:.82rem;font-weight:700}
 .ans.yes{color:var(--ok)} .ans.no{color:var(--danger)} .ans.wait{color:var(--muted)}
 
+/* Sveip til venstre for «Fjern» (bare denne dagen) */
+.sw{position:relative;overflow:hidden}
+.sw-act{position:absolute;top:0;right:0;bottom:0;width:104px;display:flex;align-items:stretch;justify-content:flex-end}
+.sw-act button{flex:1;border:0;background:var(--danger);color:#fff;font-weight:700;font-size:.92rem;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;line-height:1.15}
+.sw-act button small{font-weight:400;font-size:.72rem;opacity:.9}
+.sw-in{position:relative;background:var(--surface);transition:transform .22s ease;touch-action:pan-y;will-change:transform}
+.sw.dragging .sw-in{transition:none}
+.sw.open .sw-in{transform:translateX(-104px)}
+.bd-evw.sw,.pks .sw,.bd-pks .sw{background:var(--danger)}
+.bd-pks > .sw{border-radius:12px}
+.bd-pks > .sw .pk{border-radius:12px}
+.bd-col > .sw{border-radius:12px}
+.bd-col > .sw > .sw-in{border-radius:12px}
+.rows > .sw:first-child > .sw-in > .rowc{border-top:0}
+.tmlist .sw-in{background:var(--bg)}
+.skiprow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:.9rem}
+.skiprow s{color:var(--muted)}
+.toast{display:flex;align-items:center;gap:12px}
+.toast button{border:0;background:none;color:var(--accent);font-weight:700;font-size:.95rem;padding:2px 4px}
+@media (prefers-reduced-motion:reduce){.sw-in{transition:none}}
+
 /* Bottom bar on phones: navigation and the two add buttons within thumb reach */
 .bottombar{display:none}
 @media (max-width:640px){
@@ -580,6 +601,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
     </div>
     <footer>
       <button type="button" class="btn danger left" id="ev-del" hidden>Slett</button>
+      <button type="button" class="btn" id="ev-skip" hidden>Fjern bare denne dagen</button>
       <button type="button" class="btn" data-close>Avbryt</button>
       <button type="submit" class="btn primary" id="ev-save">Lagre</button>
     </footer>
@@ -832,8 +854,10 @@ function occursOn(e,d){
   if(e.repeat==="biweekly") return diff%14===0;
   return false;
 }
-function eventsOn(d){
-  return S.events.filter(e=>occursOn(e,d) && visible(e))
+const isSkipped=(id,ds)=>!!(S.skips&&S.skips.has(id+"|"+ds));
+function eventsOn(d,withSkipped){
+  const ds=iso(d);
+  return S.events.filter(e=>occursOn(e,d) && visible(e) && (withSkipped||!isSkipped(e.id,ds)))
     .sort((a,b)=>(a.start||"99").localeCompare(b.start||"99")||a.title.localeCompare(b.title));
 }
 function visible(e){ if(!S.hidden.size) return true; const w=e.who||[]; if(!w.length) return true; return w.some(id=>!S.hidden.has(id)); }
@@ -865,6 +889,7 @@ async function loadEvents(){
   S.help=hp.requests||[];
   if(!first) for(const r of S.help) if(r.status==="accepted"&&!before.has(r.id)) toast(`${String(r.acceptedName||"Noen").split(" ")[0]} svarte ja: ${r.what}`);
   S.confs={}; for(const c of (j.confirmations||[])) S.confs[c.eventId+"|"+c.date]=c;
+  S.skips=new Set((j.skips||[]).map(x=>x.targetId+"|"+x.date));
   if(statusMsg) statusMsg=""; render();
 }
 async function refresh(){
@@ -1194,11 +1219,11 @@ async function toggleConf(btn){
 }
 // ---------- henting ----------
 const PICK_KIND={skole:"Skolen slutter",sfo:"SFO stenger",barnehage:"Barnehagen stenger",annet:"Henting"};
-function pickupsOn(d){
+function pickupsOn(d,withSkipped){
   const wd=d.getDay()||7;
   return (S.pickups||[]).filter(p=>p.times&&p.times[wd]).map(p=>{ const m=member(p.memberId);
     return {id:"p_"+p.id,memberId:p.memberId,m,kind:p.kind,place:p.place||"",time:p.times[wd],title:(m?m.name:"Barn")+": "+(PICK_KIND[p.kind]||"Henting")}; })
-    .filter(p=>!S.hidden.has(p.memberId)).sort((a,b)=>a.time.localeCompare(b.time));
+    .filter(p=>!S.hidden.has(p.memberId)&&(withSkipped||!isSkipped(p.id,iso(d)))).sort((a,b)=>a.time.localeCompare(b.time));
 }
 function helpFor(id,ds){ const l=(S.help||[]).filter(r=>(r.targets||[r.targetId]).includes(id)&&r.date===ds&&r.status!=="closed"); return l[l.length-1]||null; }
 function helperPill(r,verb){ return `<button class="conf on helper" data-help="${esc(r.id)}" aria-label="${esc(r.acceptedName)} ${verb}. Trykk for detaljer"><span class="ck" aria-hidden="true">✓</span>${esc(String(r.acceptedName||"").split(" ")[0])} ${verb}</button>`; }
@@ -1223,7 +1248,7 @@ function pickRow(pk,d){
   if(isT&&!c){ if(nm>=tm-90&&nm<tm+30){ cls="late"; warn="Ingen har bekreftet ennå"; } else if(nm<tm) cls="open"; }
   if(isT&&nm>=tm+30) cls="past";
   const sub=[PICK_KIND[pk.kind]||"Henting",pk.place].filter(Boolean).join(" · ");
-  return `<div class="pk ${cls}" style="--pc:${pk.m?`var(--m${pk.m.c})`:"var(--muted)"}"><span class="t">${esc(pk.time)}</span><span class="pb"><b><i></i>${esc(pk.m?pk.m.name:"Barn")}</b><span>${esc(sub)}</span>${warn?`<span class="warn">${esc(warn)}</span>`:""}</span><span class="pkact">${pickBtn(pk,ds)}${cls==="past"?"":askLine(pk.id,ds,c)}</span></div>`;
+  return sw(`<div class="pk ${cls}" style="--pc:${pk.m?`var(--m${pk.m.c})`:"var(--muted)"}"><span class="t">${esc(pk.time)}</span><span class="pb"><b><i></i>${esc(pk.m?pk.m.name:"Barn")}</b><span>${esc(sub)}</span>${warn?`<span class="warn">${esc(warn)}</span>`:""}</span><span class="pkact">${pickBtn(pk,ds)}${cls==="past"?"":askLine(pk.id,ds,c)}</span></div>`,pk.id,ds);
 }
 function pickupsBlock(d){
   const list=pickupsOn(d);
@@ -1278,9 +1303,18 @@ $("#pk-save").addEventListener("click",async()=>{
 });
 $("#open-pickups").addEventListener("click",()=>{ $("#dlg-family").close(); openPickups(); });
 
+function skippedOn(d){
+  const ds=iso(d);
+  return [...pickupsOn(d,true).filter(p=>isSkipped(p.id,ds)).map(p=>({id:p.id,t:p.time,label:`${p.m?p.m.name:"Barn"} · ${PICK_KIND[p.kind]||"Henting"}`})),
+          ...eventsOn(d,true).filter(e=>isSkipped(e.id,ds)).map(e=>({id:e.id,t:e.start,label:e.title}))].sort((a,b)=>(a.t||"").localeCompare(b.t||""));
+}
+function sw(inner,id,ds,cls){
+  if(S.readOnly) return inner;
+  return `<div class="sw ${cls||""}" data-swid="${esc(id)}" data-swd="${ds}"><div class="sw-act"><button type="button" data-doskip="${esc(id)}" data-d="${ds}" tabindex="-1">Fjern<small>bare i dag</small></button></div><div class="sw-in">${inner}</div></div>`;
+}
 function evRow(e,cls,ds){
   ds=ds||iso(S.anchor);
-  return `<div class="rowc ${cls}">${evRowInner(e,"")}${confBtn(e,ds)}</div>`;
+  return sw(`<div class="rowc ${cls}">${evRowInner(e,"")}${confBtn(e,ds)}</div>`,e.id,ds);
 }
 function evRowInner(e,cls){
   const who=(e.who||[]).map(member).filter(Boolean);
@@ -1301,7 +1335,7 @@ function tomorrowList(d){
   const tl=eventsOn(addDays(d,1));
   if(!tl.length) return `<div class="tmempty">Ingenting planlagt</div>`;
   const ds=iso(addDays(d,1));
-  return `<div class="tmlist">${tl.map(e=>`<div class="tmrowc"><button class="tmrow" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}"><span class="t">${esc(e.start||"Hele dagen")}</span><i></i><span>${esc(e.title)}${whoNames(e)?` <small>· ${esc(whoNames(e))}</small>`:""}</span></button>${confBtn(e,ds)}</div>`).join("")}</div>`;
+  return `<div class="tmlist">${tl.map(e=>sw(`<div class="tmrowc"><button class="tmrow" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}"><span class="t">${esc(e.start||"Hele dagen")}</span><i></i><span>${esc(e.title)}${whoNames(e)?` <small>· ${esc(whoNames(e))}</small>`:""}</span></button>${confBtn(e,ds)}</div>`,e.id,ds)).join("")}</div>`;
 }
 function renderDay(){
   const d=S.anchor, list=eventsOn(d), isToday=iso(d)===iso(today());
@@ -1317,6 +1351,9 @@ function renderDay(){
   const shown=S.showPast?list:rest;
   if(shown.length) h+=`<div class="rows">${shown.map(e=>evRow(e,rowState(e,isToday,nm,null),iso(d))).join("")}</div>`;
   else h+=`<div class="td-done">${list.length?"Ingen flere avtaler i dag.":(isToday?"Ingen avtaler i dag.":"Ingen avtaler denne dagen.")}</div>`;
+  const sk=skippedOn(d);
+  if(sk.length){ h+=`<button class="fold" data-act="skipped">${S.showSkipped?"Skjul fjernede":`Fjernet for dagen (${sk.length}) · vis`}</button>`;
+    if(S.showSkipped) h+=sk.map(x=>`<div class="skiprow"><span><s>${esc(x.t||"")} ${esc(x.label)}</s></span><button class="act light" data-unskip="${esc(x.id)}" data-d="${iso(d)}">Gjenopprett</button></div>`).join(""); }
   if(past.length) h+=`<button class="fold" data-act="past">${S.showPast?"Skjul ferdige":`✓ ${past.length} ${past.length===1?"ferdig avtale":"ferdige avtaler"} i dag · vis`}</button>`;
   h+=`<h2 class="sec-h">${isToday?"I morgen":cap(fDayLong.format(addDays(d,1)))}</h2>${tomorrowList(d)}`;
   if(S.events.some(e=>e.example)&&!S.readOnly) h+=`<button class="fold" data-act="clear-ex">Fjern eksempelavtalene</button>`;
@@ -1360,6 +1397,7 @@ function openEvent(e, fromSms){
   const smsEl=$("#ev-sms"); if(x.sms){smsEl.hidden=false;smsEl.innerHTML=`<div class="f" style="font-size:.8rem;font-weight:700;color:var(--muted)">Original melding</div><div class="origsms">${esc(x.sms)}</div>`} else smsEl.hidden=true;
   const del=$("#ev-del"); del.hidden=!S.events.some(z=>z.id===x.id) || S.readOnly; del.textContent="Slett"; del.dataset.armed="";
   const fromFeed=String(x.id).startsWith("f_");
+  { const exists=S.events.some(z=>z.id===x.id); const sb=$("#ev-skip"); sb.hidden=!exists||S.readOnly; if(exists){ const ds=S.editDate||(x.repeat?iso(S.anchor):x.date); sb.dataset.d=ds; sb.textContent=x.repeat||fromFeed?`Fjern bare ${ds===iso(today())?"i dag":cap(fDayLong.format(parseISO(ds)))}`:"Fjern bare denne dagen"; } }
   $("#ev-save").disabled=S.readOnly||fromFeed;
   if(fromFeed){ $("#ev-h").textContent="Fra "+(x.sourceName||"kalenderabonnement"); $("#ev-del").hidden=true;
     const smsEl=$("#ev-sms"); smsEl.hidden=false; smsEl.innerHTML=`<div class="origsms">Denne avtalen hentes automatisk fra «${esc(x.sourceName||"abonnement")}». Endringer gjøres i kilden, for eksempel i Spond.</div>`; }
@@ -2074,7 +2112,7 @@ document.addEventListener("click",e=>{
   const mem=e.target.closest("[data-mem]"); if(mem){ const id=mem.dataset.mem; S.hidden.has(id)?S.hidden.delete(id):S.hidden.add(id); render(); return; }
   if(e.target.closest("#edit-fam")){ openFam(); return; }
   const act=e.target.closest("[data-act]"); if(act){ const a=act.dataset.act;
-    if(a==="pickups"){ openPickups(); } else if(a==="chore-new"){ openChore(null); } else if(a==="chore-ex"){ choreExamples(); } else if(a==="set-save"){ saveChoreSettings(); } else if(a==="go-chores"){ if(S.board) setBoard(false); S.view="chores"; S.anchor=today(); render(); window.scrollTo({top:0}); } else if(a==="note"){ openNote(null); } else if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
+    if(a==="skipped"){ S.showSkipped=!S.showSkipped; render(); } else if(a==="pickups"){ openPickups(); } else if(a==="chore-new"){ openChore(null); } else if(a==="chore-ex"){ choreExamples(); } else if(a==="set-save"){ saveChoreSettings(); } else if(a==="go-chores"){ if(S.board) setBoard(false); S.view="chores"; S.anchor=today(); render(); window.scrollTo({top:0}); } else if(a==="note"){ openNote(null); } else if(a==="past"){ S.showPast=!S.showPast; render(); } else if(a==="today"){ S.anchor=today(); render(); } else if(a==="sms") openSms(""); else if(a==="new") openEvent(null); else if(a==="examples") addExamples(); else if(a==="clear-ex") removeExamples(); }
 });
 document.addEventListener("paste",e=>{
   if(e.target.closest("input,textarea,dialog")||S.readOnly) return;
@@ -2096,9 +2134,9 @@ function renderBoard(){
   const fell=list.filter(shared);
   if(fell.length) cols.push({name:"Hele familien",pc:"var(--ink)",items:fell});
   for(const m of S.members){ if(S.hidden.has(m.id)) continue; cols.push({name:m.name,pc:`var(--m${m.c})`,items:list.filter(e=>!shared(e)&&(e.who||[]).includes(m.id))}); }
-  const card=e=>`<div class="bd-evw ${state(e)}"><button class="bd-ev" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}">
+  const card=e=>sw(`<div class="bd-evw ${state(e)}"><button class="bd-ev" data-ev="${esc(e.id)}" style="--pc:${colorOf(e)}">
       <span class="t">${e.start?esc(e.start):"Hele dagen"}${e.end?`<small>–${esc(e.end)}</small>`:""}</span>
-      <span class="x">${esc(e.title)}</span>${e.place?`<span class="p">${esc(e.place)}</span>`:""}${e.note?`<span class="p">${esc(e.note)}</span>`:""}</button>${confBtn(e,iso(d))}</div>`;
+      <span class="x">${esc(e.title)}</span>${e.place?`<span class="p">${esc(e.place)}</span>`:""}${e.note?`<span class="p">${esc(e.note)}</span>`:""}</button>${confBtn(e,iso(d))}</div>`,e.id,iso(d));
   const fs=!!(document.fullscreenElement||document.webkitFullscreenElement);
   const ns=notesOn(d);
   el.innerHTML = !S.loaded ? `<div class="empty"><b>Henter familiens kalender …</b></div>` : `
@@ -2142,7 +2180,55 @@ window.addEventListener("hashchange",()=>{ const on=location.hash==="#tavle"; if
 if(location.hash==="#tavle"){ S.board=true; keepAwake(); }
 setInterval(()=>{ if(S.board && !document.querySelector("dialog[open]")) render(); },20000);
 
-let tt; function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2400)}
+let tt; function toast(m,action,fn){const t=$("#toast");t.textContent=m;
+  if(action){ const b=document.createElement("button"); b.type="button"; b.textContent=action; b.onclick=()=>{ t.hidden=true; fn(); }; t.appendChild(b); }
+  t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,action?6000:2400)}
+
+// ---------- sveip til venstre → Fjern (bare denne dagen) ----------
+const SW_W=104; let swOpen=null, swDrag=null, swSuppress=false;
+function closeSw(except){ if(swOpen&&swOpen!==except){ swOpen.classList.remove("open"); swOpen.querySelector(".sw-in").style.transform=""; } if(swOpen!==except) swOpen=null; }
+document.addEventListener("pointerdown",e=>{
+  const el=e.target.closest(".sw"); if(!el){ closeSw(); return; }
+  if(e.target.closest(".sw-act")) return;
+  if(e.pointerType==="mouse"&&e.button!==0) return;
+  closeSw(el);
+  swDrag={el,x:e.clientX,y:e.clientY,dx:0,on:false,base:el.classList.contains("open")?-SW_W:0,id:e.pointerId};
+},{passive:true});
+document.addEventListener("pointermove",e=>{
+  const d=swDrag; if(!d||e.pointerId!==d.id) return;
+  const dx=e.clientX-d.x, dy=e.clientY-d.y;
+  if(!d.on){ if(Math.abs(dx)<10) return; if(Math.abs(dy)>Math.abs(dx)){ swDrag=null; return; } d.on=true; d.el.classList.add("dragging"); try{ d.el.setPointerCapture(e.pointerId); }catch{} }
+  d.dx=dx; const x=Math.max(-SW_W-24,Math.min(0,d.base+dx)); d.el.querySelector(".sw-in").style.transform=`translateX(${x}px)`;
+});
+function endSw(e){
+  const d=swDrag; if(!d||(e&&e.pointerId!==d.id)) return; swDrag=null;
+  if(!d.on) return;
+  swSuppress=true; setTimeout(()=>swSuppress=false,350);
+  d.el.classList.remove("dragging"); const inn=d.el.querySelector(".sw-in"); inn.style.transform="";
+  const pos=d.base+d.dx;
+  if(pos<-SW_W/2){ d.el.classList.add("open"); swOpen=d.el; } else { d.el.classList.remove("open"); if(swOpen===d.el) swOpen=null; }
+}
+document.addEventListener("pointerup",endSw); document.addEventListener("pointercancel",endSw);
+document.addEventListener("click",e=>{ if(swSuppress&&!e.target.closest(".sw-act")){ e.preventDefault(); e.stopPropagation(); } },true);
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeSw(); });
+
+async function skipOne(id,ds){
+  S.skips=S.skips||new Set(); S.skips.add(id+"|"+ds); closeSw(); render();
+  const label=id.startsWith("p_")?"Hentingen":"Avtalen";
+  try{ await api("/api/skips",{method:"POST",body:{targetId:id,date:ds}}); toast(`${label} er fjernet for ${ds===iso(today())?"i dag":"denne dagen"}`,"Angre",()=>unskipOne(id,ds)); }
+  catch(x){ S.skips.delete(id+"|"+ds); render(); if(x.status!==401) toast(x.error); }
+}
+async function unskipOne(id,ds){
+  S.skips.delete(id+"|"+ds); render();
+  try{ await api(`/api/skips?targetId=${encodeURIComponent(id)}&date=${ds}`,{method:"DELETE"}); toast("Gjenopprettet"); }
+  catch(x){ S.skips.add(id+"|"+ds); render(); if(x.status!==401) toast(x.error); }
+}
+document.addEventListener("click",e=>{
+  const sk=e.target.closest("[data-doskip]"), un=e.target.closest("[data-unskip]"), evs=e.target.closest("#ev-skip");
+  if(sk){ e.preventDefault(); e.stopPropagation(); skipOne(sk.dataset.doskip,sk.dataset.d); }
+  else if(un){ e.preventDefault(); e.stopPropagation(); unskipOne(un.dataset.unskip,un.dataset.d); }
+  else if(evs){ e.preventDefault(); e.stopPropagation(); const id=S.editing&&S.editing.id; $("#dlg-event").close(); if(id) skipOne(id,evs.dataset.d); }
+},true);
 // keep "next up" fresh
 setInterval(()=>{ if(S.view==="day" && !S.board && !document.querySelector("dialog[open]")) render(); },30000);
 

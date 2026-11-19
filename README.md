@@ -15,6 +15,12 @@ Har uke- og månedsvisning, en fullskjermtavle for nettbrett/vegg, og avtaler ka
 - **Stedssøk:** skriv «holmen svømme» i Sted-feltet og velg fra forslagene. Avtalen får adresse og lenke til Google Maps. Krever `GOOGLE_MAPS_API_KEY` (valgfritt). Uten nøkkel får alle steder likevel en «Åpne i Google Maps»-lenke basert på teksten.
 - Kan legges til på Hjem-skjermen på iPhone/Android og åpnes som en app (web-manifest).
 
+## Fjerne for én dag (sykdom, avlyst)
+
+Sveip en avtale eller henting til venstre på **I dag** eller **tavla**, og trykk **«Fjern – bare i dag»**.
+Bare den ene dagen skjules. Faste avtaler, ukentlige treninger og hentetider fremover er uendret.
+Angre fra meldingen nederst, eller via **«Fjernet for dagen · vis» → Gjenopprett**. Inne i en avtale finnes også **«Fjern bare i dag»**.
+
 ## Henting
 
 Foreldre legger inn faste tider under **Familie → Faste hentetider**: når skolen slutter, SFO eller barnehagen stenger, per barn og ukedag.
