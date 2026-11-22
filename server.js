@@ -69,6 +69,9 @@ async function migrate() {
       created_at timestamptz not null default now()
     );
     create unique index if not exists users_email_idx on users (lower(email));
+    alter table users add column if not exists google_sub text;
+    alter table users add column if not exists pw_set boolean not null default true;
+    create unique index if not exists users_google_idx on users (google_sub) where google_sub is not null;
     create table if not exists sessions (
       token_hash text primary key,
       user_id uuid not null references users(id) on delete cascade,
@@ -228,7 +231,7 @@ function setSessionCookie(res, value, maxAgeMs) {
   const o = cookieOpts(maxAgeMs);
   const parts = [`fl_sess=${encodeURIComponent(value)}`, `Path=/`, `Max-Age=${Math.floor(o.maxAge / 1000)}`, `HttpOnly`, `SameSite=Lax`];
   if (o.secure) parts.push("Secure");
-  res.setHeader("Set-Cookie", parts.join("; "));
+  res.append("Set-Cookie", parts.join("; "));
 }
 
 async function createSession(res, userId) {
@@ -279,7 +282,7 @@ async function auth(req, res, next) {
   const t = parseCookies(req.headers.cookie).fl_sess;
   if (!t) return res.status(401).json({ error: "Ikke innlogget." });
   const { rows } = await pool.query(
-    `select u.id, u.name, u.email, u.role, u.family_id, u.kind, u.member_id
+    `select u.id, u.name, u.email, u.role, u.family_id, u.kind, u.member_id, u.pw_set, (u.google_sub is not null) as google
        from sessions s join users u on u.id = s.user_id
       where s.token_hash = $1 and s.expires_at > now()`,
     [sha(t)]
@@ -303,7 +306,7 @@ async function familyPayload(user) {
   }
   const people = await pool.query(`select id, name, email, role, kind, member_id from users where family_id = $1 order by created_at`, [user.family_id]);
   return {
-    user: { id: user.id, name: user.name, email: user.email, role: user.role, kind: user.kind || "parent", memberId: user.member_id },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, kind: user.kind || "parent", memberId: user.member_id, hasPassword: user.pw_set !== false, google: !!user.google },
     family: { name: f.rows[0].name, members, accounts: people.rows.map((a) => ({ id: a.id, name: a.name, email: a.email, role: a.role, kind: a.kind, memberId: a.member_id })), settings: f.rows[0].settings || {} },
     imageReading: !!ANTHROPIC_API_KEY,
     placesSearch: !!GOOGLE_MAPS_API_KEY,
@@ -311,6 +314,42 @@ async function familyPayload(user) {
 }
 
 // Register: with a valid invite you join that family, otherwise a new family is created
+// Ny bruker: bli med i familien fra en invitasjon, eller lag en ny familie (kjøres i en transaksjon)
+async function joinOrCreateFamily(client, name, invite) {
+    let familyId, role = "owner", kind = "parent", memberId = null;
+  if (invite) {
+    const inv = await client.query(
+      `select family_id, kind from invites where token_hash = $1 and expires_at > now() and used_at is null for update`,
+      [sha(invite)]
+    );
+    if (!inv.rows[0]) return { error: "Invitasjonen er brukt eller utløpt. Be om en ny lenke." };
+    familyId = inv.rows[0].family_id;
+    role = "member";
+    kind = inv.rows[0].kind === "child" ? "child" : "parent";
+    await client.query(`update invites set used_at = now() where token_hash = $1`, [sha(invite)]);
+    // Add the new person to the calendar's family list if they aren't there yet
+    const f = await client.query(`select members from families where id = $1`, [familyId]);
+    const members = f.rows[0].members || [];
+    const first = name.split(/\s+/)[0].toLowerCase();
+    const existing = members.find((m) => String(m.name).split(/\s+/)[0].toLowerCase() === first);
+    if (existing) {
+      memberId = existing.id;
+      if (kind === "child" && !existing.kid) { existing.kid = true; await client.query(`update families set members = $1 where id = $2`, [JSON.stringify(members), familyId]); }
+    } else {
+      memberId = "m" + crypto.randomBytes(4).toString("hex");
+      members.push({ id: memberId, name: name.split(/\s+/)[0], c: (members.length % COLORS) + 1, ...(kind === "child" ? { kid: true } : {}) });
+      await client.query(`update families set members = $1 where id = $2`, [JSON.stringify(members), familyId]);
+    }
+  } else {
+    const surname = name.split(/\s+/).length > 1 ? name.split(/\s+/).slice(-1)[0] : name;
+    memberId = "m" + crypto.randomBytes(4).toString("hex");
+    const members = [{ id: memberId, name: name.split(/\s+/)[0], c: 1 }];
+    const f = await client.query(`insert into families (name, members) values ($1, $2) returning id`, ["Familien " + surname, JSON.stringify(members)]);
+    familyId = f.rows[0].id;
+  }
+  return { familyId, role, kind, memberId };
+}
+
 app.post("/api/register", throttle(10, 15 * 60e3), wrap(async (req, res) => {
   const name = clean(req.body.name, 60);
   const email = clean(req.body.email, 200).toLowerCase();
@@ -326,37 +365,9 @@ app.post("/api/register", throttle(10, 15 * 60e3), wrap(async (req, res) => {
     const exists = await client.query(`select 1 from users where lower(email) = $1`, [email]);
     if (exists.rows[0]) { await client.query("rollback"); return res.status(409).json({ error: "Det finnes allerede en konto med denne e-posten. Logg inn i stedet." }); }
 
-    let familyId, role = "owner", kind = "parent", memberId = null;
-    if (invite) {
-      const inv = await client.query(
-        `select family_id, kind from invites where token_hash = $1 and expires_at > now() and used_at is null for update`,
-        [sha(invite)]
-      );
-      if (!inv.rows[0]) { await client.query("rollback"); return res.status(400).json({ error: "Invitasjonen er brukt eller utløpt. Be om en ny lenke." }); }
-      familyId = inv.rows[0].family_id;
-      role = "member";
-      kind = inv.rows[0].kind === "child" ? "child" : "parent";
-      await client.query(`update invites set used_at = now() where token_hash = $1`, [sha(invite)]);
-      // Add the new person to the calendar's family list if they aren't there yet
-      const f = await client.query(`select members from families where id = $1`, [familyId]);
-      const members = f.rows[0].members || [];
-      const first = name.split(/\s+/)[0].toLowerCase();
-      const existing = members.find((m) => String(m.name).split(/\s+/)[0].toLowerCase() === first);
-      if (existing) {
-        memberId = existing.id;
-        if (kind === "child" && !existing.kid) { existing.kid = true; await client.query(`update families set members = $1 where id = $2`, [JSON.stringify(members), familyId]); }
-      } else {
-        memberId = "m" + crypto.randomBytes(4).toString("hex");
-        members.push({ id: memberId, name: name.split(/\s+/)[0], c: (members.length % COLORS) + 1, ...(kind === "child" ? { kid: true } : {}) });
-        await client.query(`update families set members = $1 where id = $2`, [JSON.stringify(members), familyId]);
-      }
-    } else {
-      const surname = name.split(/\s+/).length > 1 ? name.split(/\s+/).slice(-1)[0] : name;
-      memberId = "m" + crypto.randomBytes(4).toString("hex");
-      const members = [{ id: memberId, name: name.split(/\s+/)[0], c: 1 }];
-      const f = await client.query(`insert into families (name, members) values ($1, $2) returning id`, ["Familien " + surname, JSON.stringify(members)]);
-      familyId = f.rows[0].id;
-    }
+    const j = await joinOrCreateFamily(client, name, invite);
+    if (j.error) { await client.query("rollback"); return res.status(400).json({ error: j.error }); }
+    const { familyId, role, kind, memberId } = j;
     const hash = await bcrypt.hash(password, 11);
     const u = await client.query(
       `insert into users (family_id, name, email, password_hash, role, kind, member_id) values ($1, $2, $3, $4, $5, $6, $7) returning id`,
@@ -418,8 +429,10 @@ app.delete("/api/accounts/:id", wrap(auth), parentOnly, wrap(async (req, res) =>
 // Slett min konto (krav fra Apple og GDPR). Er du alene, slettes hele familien med alt innhold.
 app.post("/api/me/delete", throttle(5, 15 * 60e3), wrap(auth), wrap(async (req, res) => {
   const password = typeof req.body.password === "string" ? req.body.password : "";
-  const u = await pool.query(`select password_hash from users where id = $1`, [req.user.id]);
-  if (!(await bcrypt.compare(password, u.rows[0].password_hash))) return res.status(401).json({ error: "Feil passord." });
+  const u = await pool.query(`select password_hash, pw_set from users where id = $1`, [req.user.id]);
+  if (u.rows[0].pw_set === false) { // Google-konto uten passord: bekreft med ordet SLETT
+    if (String(req.body.confirm || "").trim().toUpperCase() !== "SLETT") return res.status(400).json({ error: "Skriv SLETT for å bekrefte." });
+  } else if (!(await bcrypt.compare(password, u.rows[0].password_hash))) return res.status(401).json({ error: "Feil passord." });
   const others = await pool.query(`select id, kind, role from users where family_id = $1 and id <> $2 order by created_at`, [req.user.family_id, req.user.id]);
   const client = await pool.connect();
   try {
@@ -490,7 +503,7 @@ app.post("/api/password/reset", throttle(10, 15 * 60e3), wrap(async (req, res) =
     );
     if (!rows[0]) { await client.query("rollback"); return res.status(400).json({ error: "Lenken er brukt eller utløpt. Be om en ny." }); }
     const uid = rows[0].user_id;
-    await client.query(`update users set password_hash = $1 where id = $2`, [await bcrypt.hash(password, 11), uid]);
+    await client.query(`update users set password_hash = $1, pw_set = true where id = $2`, [await bcrypt.hash(password, 11), uid]);
     await client.query(`update password_resets set used_at = now() where user_id = $1 and used_at is null`, [uid]);
     await client.query(`delete from sessions where user_id = $1`, [uid]); // logg ut alle andre steder
     await client.query("commit");
@@ -1434,6 +1447,66 @@ app.use("/vendor/lang", express.static(path.join(__dirname, "node_modules/@tesse
 
 // Helsesjekk for Render og oppetidsovervåking: sjekker også databasen
 const STARTED = Date.now();
+// ---------- Logg inn med Google (OpenID Connect, «authorization code»-flyt) ----------
+// Slås på med GOOGLE_CLIENT_ID og GOOGLE_CLIENT_SECRET. Redirect-URI i Google Cloud:
+// <PUBLIC_URL>/auth/google/callback
+const G_ID = process.env.GOOGLE_CLIENT_ID || "", G_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const googleOn = () => !!(G_ID && G_SECRET);
+const publicBase = (req) => process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`;
+const gFail = (res, msg) => res.redirect("/?loginerr=" + encodeURIComponent(msg));
+
+app.get("/auth/google", throttle(30, 15 * 60e3), (req, res) => {
+  if (!googleOn()) return gFail(res, "Innlogging med Google er ikke slått på ennå.");
+  const state = token();
+  const invite = clean(req.query.invite, 100);
+  const cookie = Buffer.from(JSON.stringify({ s: state, i: invite })).toString("base64url");
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.append("Set-Cookie", `fl_g=${cookie}; Path=/auth/google; Max-Age=600; HttpOnly; SameSite=Lax${secure}`);
+  const q = new URLSearchParams({ client_id: G_ID, redirect_uri: publicBase(req) + "/auth/google/callback", response_type: "code", scope: "openid email profile", state, prompt: "select_account" });
+  res.redirect("https://accounts.google.com/o/oauth2/v2/auth?" + q);
+});
+
+app.get("/auth/google/callback", throttle(30, 15 * 60e3), wrap(async (req, res) => {
+  if (!googleOn()) return gFail(res, "Innlogging med Google er ikke slått på ennå.");
+  let st = {}; try { st = JSON.parse(Buffer.from(parseCookies(req.headers.cookie).fl_g || "", "base64url").toString()); } catch {}
+  res.append("Set-Cookie", "fl_g=; Path=/auth/google; Max-Age=0; HttpOnly; SameSite=Lax");
+  if (req.query.error) return gFail(res, "Innloggingen med Google ble avbrutt.");
+  if (!st.s || st.s !== req.query.state || !req.query.code) return gFail(res, "Innloggingen tok for lang tid. Prøv igjen.");
+  const tr = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ code: String(req.query.code), client_id: G_ID, client_secret: G_SECRET, redirect_uri: publicBase(req) + "/auth/google/callback", grant_type: "authorization_code" }) });
+  const tj = await tr.json().catch(() => ({}));
+  if (!tr.ok || !tj.id_token) { console.error("Google token-feil:", tr.status, tj.error); return gFail(res, "Kunne ikke logge inn med Google. Prøv igjen."); }
+  // ID-tokenet kommer rett fra Google over TLS, så vi sjekker innholdet uten å verifisere signaturen selv
+  let c = {}; try { c = JSON.parse(Buffer.from(tj.id_token.split(".")[1], "base64url").toString()); } catch {}
+  const okIss = c.iss === "https://accounts.google.com" || c.iss === "accounts.google.com";
+  if (!okIss || c.aud !== G_ID || !c.sub || (c.exp || 0) * 1000 < Date.now()) return gFail(res, "Kunne ikke bekrefte Google-kontoen.");
+  if (!c.email || c.email_verified !== true) return gFail(res, "Google-kontoen har ingen bekreftet e-postadresse.");
+  const email = clean(c.email, 200).toLowerCase(), sub = String(c.sub);
+
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    let u = (await client.query(`select id from users where google_sub = $1`, [sub])).rows[0];
+    if (!u) {
+      // Finnes det en konto med samme (bekreftede) e-post, kobles Google til den
+      u = (await client.query(`select id from users where lower(email) = $1`, [email])).rows[0];
+      if (u) await client.query(`update users set google_sub = $1 where id = $2`, [sub, u.id]);
+    }
+    if (!u) {
+      const name = clean(c.name || [c.given_name, c.family_name].filter(Boolean).join(" ") || email.split("@")[0], 60);
+      const j = await joinOrCreateFamily(client, name, clean(st.i, 100));
+      if (j.error) { await client.query("rollback"); return gFail(res, j.error); }
+      const hash = await bcrypt.hash(token(), 11); // tilfeldig passord: kan settes senere med «Glemt passord»
+      u = (await client.query(
+        `insert into users (family_id, name, email, password_hash, role, kind, member_id, google_sub, pw_set) values ($1, $2, $3, $4, $5, $6, $7, $8, false) returning id`,
+        [j.familyId, name, email, hash, j.role, j.kind, j.memberId, sub])).rows[0];
+    }
+    await client.query("commit");
+    await createSession(res, u.id);
+    res.redirect("/");
+  } catch (e) { await client.query("rollback").catch(() => {}); throw e; } finally { client.release(); }
+}));
+
 app.get("/healthz", async (req, res) => {
   let db = false;
   try { await Promise.race([pool.query("select 1"), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); db = true; } catch {}
@@ -1446,7 +1519,7 @@ async function currentStatus() {
   try { const r = await pool.query(`select message, level, updated_at from app_status where id = 1`); const x = r.rows[0]; return x && x.message ? { message: x.message, level: x.level, updatedAt: x.updated_at, env: APP_ENV } : { message: "", env: APP_ENV }; }
   catch { return { message: "", env: APP_ENV }; }
 }
-app.get("/api/status", wrap(async (req, res) => { res.setHeader("Cache-Control", "no-store"); res.json({ ...(await currentStatus()), version: VERSION }); }));
+app.get("/api/status", wrap(async (req, res) => { res.setHeader("Cache-Control", "no-store"); res.json({ ...(await currentStatus()), version: VERSION, google: googleOn() }); }));
 app.put("/api/admin/status", wrap(auth), wrap(async (req, res) => {
   if (!ADMIN_EMAILS.includes(String(req.user.email).toLowerCase())) return res.status(403).json({ error: "Ingen tilgang." });
   const message = clean(req.body.message, 300), level = ["info", "warn", "down"].includes(req.body.level) ? req.body.level : "info";

@@ -51,6 +51,7 @@ Målet er App Store/Google Play i Norge, Sverige og Danmark.
 | `GOOGLE_MAPS_API_KEY` | nei | Stedssøk |
 | `ADMIN_EMAILS` | nei | Kommaseparert, gir tilgang til `/admin` |
 | `RESEND_API_KEY`, `MAIL_FROM` | nei | E-post (glemt passord). Uten nøkkel logges lenken |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | nei | «Fortsett med Google» (`/auth/google`). Redirect-URI: `<PUBLIC_URL>/auth/google/callback`. Kontoer laget slik har `pw_set = false` og bekrefter sletting med «SLETT» |
 | `SENTRY_DSN` | nei | Feillogging til Sentry (server + nettleser via `/api/client-error`) |
 | `PUBLIC_URL` | nei | Ellers brukes `RENDER_EXTERNAL_URL` |
 | `ALLOW_PRIVATE_FEEDS` | nei | Kun for lokal test av kalenderabonnement |

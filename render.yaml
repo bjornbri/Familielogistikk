@@ -30,6 +30,10 @@ services:
         sync: false
       - key: SENTRY_DSN
         sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       - key: MAIL_FROM
         value: "Familielogistikk <noreply@familielogistikk.no>"
 
@@ -60,6 +64,10 @@ services:
       - key: ADMIN_EMAILS
         sync: false
       - key: SENTRY_DSN
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
         sync: false
 
 databases:

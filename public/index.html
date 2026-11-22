@@ -490,6 +490,9 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
 .auth-tabs button{flex:1;border:0;background:none;padding:8px;border-radius:8px;font-weight:700;color:var(--muted)}
 .auth-tabs button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .auth-err{color:var(--danger);font-size:.9rem;margin:0}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);font-weight:700}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.85rem}
+.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
 .invite-note{background:color-mix(in srgb,var(--accent) 18%,var(--surface));border:1px solid var(--accent);border-radius:12px;padding:10px 14px;font-size:.92rem}
 .auth-card .btn.primary{padding:11px 14px;font-size:1rem}
 .acct{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
@@ -531,6 +534,8 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
         <button type="button" id="auth-tab-login" aria-pressed="true">Logg inn</button>
         <button type="button" id="auth-tab-reg" aria-pressed="false">Opprett konto</button>
       </div>
+      <a class="btn gbtn" id="auth-google" href="/auth/google" hidden><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg><span id="auth-google-t">Fortsett med Google</span></a>
+      <div class="or" id="auth-or" hidden><span>eller med e-post</span></div>
       <label class="f" id="auth-name-row" hidden>Navn<input id="auth-name" autocomplete="name" placeholder="Fornavn Etternavn"></label>
       <label class="f" id="auth-email-row">E-post<input id="auth-email" type="email" autocomplete="email" inputmode="email" required></label>
       <label class="f" id="auth-pass-row"><span id="auth-pass-label">Passord</span><input id="auth-pass" type="password" autocomplete="current-password" minlength="8" required></label>
@@ -793,7 +798,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
         <details id="delme" style="font-size:.88rem"><summary style="cursor:pointer;color:var(--danger);font-weight:700">Slett min konto</summary>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
             <p id="delme-info" style="margin:0;color:var(--muted)"></p>
-            <label class="f">Skriv passordet ditt for å bekrefte<input id="delme-pass" type="password" autocomplete="current-password"></label>
+            <label class="f"><span id="delme-plabel">Skriv passordet ditt for å bekrefte</span><input id="delme-pass" type="password" autocomplete="current-password"></label>
             <p class="auth-err" id="delme-err" hidden></p>
             <div><button type="button" class="btn danger" id="delme-go" style="border-color:var(--danger)">Slett kontoen for godt</button></div>
           </div></details>
@@ -837,7 +842,15 @@ function showOps(st){
   else if(st.env&&st.env!=="produksjon"&&st.env!=="lokal"){ el.className="opsbar test"; el.textContent="Testmiljø – ikke ekte data"; el.hidden=false; }
   else el.hidden=true;
 }
-fetch("/api/status",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).then(showOps).catch(()=>{});
+fetch("/api/status",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).then(st=>{ showOps(st); if(st&&st.google) showGoogle(); }).catch(()=>{});
+// «Fortsett med Google» vises bare når serveren har Google-nøklene
+function showGoogle(){
+  const a=$("#auth-google"); if(!a) return;
+  const inv=new URLSearchParams(location.search).get("invite");
+  a.href="/auth/google"+(inv?"?invite="+encodeURIComponent(inv):"");
+  a.hidden=false; $("#auth-or").hidden=false;
+}
+{ const le=new URLSearchParams(location.search).get("loginerr"); if(le) setTimeout(()=>{ const e=$("#auth-err"); if(e){ e.textContent=le; e.hidden=false; } history.replaceState(null,"",location.pathname); },0); }
 const COLORS = 6;
 const DEFAULT_MEMBERS = [
   {id:"p1",name:"Pappa",c:1},{id:"p2",name:"Mamma",c:2},{id:"b1",name:"Barn 1",c:3},{id:"b2",name:"Barn 2",c:4}
@@ -2063,6 +2076,7 @@ function drawAcct(){
   const alone=(me.family.accounts||[]).length<=1;
   $("#delme-info").textContent=alone?"Du er den eneste i familien. Hele familien slettes, med alle avtaler, beskjeder, oppgaver og bilder. Dette kan ikke angres.":"Kontoen din slettes og du logges ut. Familiens kalender blir værende for de andre."+(me.user.role==="owner"?" En annen forelder overtar familien.":"");
   $("#delme-pass").value=""; $("#delme-err").hidden=true; $("#delme").open=false;
+  { const np=me.user.hasPassword===false; $("#delme-plabel").textContent=np?"Skriv SLETT for å bekrefte":"Skriv passordet ditt for å bekrefte"; $("#delme-pass").type=np?"text":"password"; $("#delme-pass").autocomplete=np?"off":"current-password"; }
   $("#open-pickups").hidden=me.user.kind==="child";
   $("#helpers-sec").hidden=me.user.kind==="child"; drawHelpers(); $("#helper-err").hidden=true;
 }
@@ -2116,8 +2130,9 @@ $("#acct-list").addEventListener("click",async e=>{
 });
 $("#delme-go").addEventListener("click",async()=>{
   const err=$("#delme-err"); err.hidden=true; const pw=$("#delme-pass").value;
-  if(!pw){ err.textContent="Skriv passordet ditt."; err.hidden=false; return; }
-  try{ await api("/api/me/delete",{method:"POST",body:{password:pw},noAuthRedirect:true}); dFam.close(); S.events=[]; S.notes=[]; S.ch=null; S.loaded=false; showAuth(); toast("Kontoen er slettet"); }
+  const np=S.me&&S.me.user&&S.me.user.hasPassword===false;
+  if(!pw){ err.textContent=np?"Skriv SLETT.":"Skriv passordet ditt."; err.hidden=false; return; }
+  try{ await api("/api/me/delete",{method:"POST",body:np?{confirm:pw}:{password:pw},noAuthRedirect:true}); dFam.close(); S.events=[]; S.notes=[]; S.ch=null; S.loaded=false; showAuth(); toast("Kontoen er slettet"); }
   catch(x){ err.textContent=x.error; err.hidden=false; }
 });
 function drawFam(){
