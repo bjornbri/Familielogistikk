@@ -94,11 +94,21 @@ export $(grep -v '^#' .env | xargs) && npm run dev
 
 Tabellene opprettes automatisk ved oppstart.
 
+## Drift, testmiljø og feillogging
+
+- `render.yaml` lager to tjenester: **familielogistikk** (branch `main`) og **familielogistikk-test** (branch `staging`). Testmiljøet bruker samme database, men egne tabeller, og viser en «Testmiljø»-stripe.
+- `/healthz` sjekker også databasen og svarer 503 hvis den er nede – pek oppetidsovervåking hit.
+- Driftsmelding til alle brukere settes på `/admin`.
+- Sett `SENTRY_DSN` i Render for å få feil fra server og nettleser på e-post via Sentry.
+- Mer for utviklere: se `CLAUDE.md`.
+
 ## Struktur
 
 - `server.js` – API, innlogging, invitasjoner, bildelesing
 - `public/index.html` – hele appen (én side)
+- `public/help.html` – svarside for hjelpere, `public/admin.html` – statistikk og driftsmelding
 - `render.yaml` – oppsett for Render
+- `CLAUDE.md` – alt en ny utvikler (eller Claude) trenger å vite
 
 ## Neste steg
 

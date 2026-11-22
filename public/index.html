@@ -390,6 +390,10 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .tmlist .sw-in{background:var(--bg)}
 .skiprow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);font-size:.9rem}
 .skiprow s{color:var(--muted)}
+.opsbar{position:sticky;top:0;z-index:40;padding:10px max(16px,env(safe-area-inset-left,0px));padding-top:calc(10px + env(safe-area-inset-top,0px));font-weight:700;font-size:.92rem;line-height:1.35;background:color-mix(in srgb,var(--accent) 22%,var(--surface));color:var(--ink);border-bottom:1px solid color-mix(in srgb,var(--accent) 55%,var(--line))}
+.opsbar.down{background:#B4332E;color:#fff;border-color:#B4332E}
+.opsbar.test{background:var(--ink);color:var(--surface);border-color:var(--ink);font-size:.8rem;padding-block:4px;text-align:center}
+.opsbar small{font-weight:400;opacity:.8;margin-left:6px}
 .toast{display:flex;align-items:center;gap:12px}
 .toast button{border:0;background:none;color:var(--accent);font-weight:700;font-size:.95rem;padding:2px 4px}
 @media (prefers-reduced-motion:reduce){.sw-in{transition:none}}
@@ -512,6 +516,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
 </style>
 </head>
 <body>
+<div id="opsbar" class="opsbar" role="status" hidden></div>
 
 <section id="auth" hidden>
   <form class="auth-card" id="auth-form" novalidate>
@@ -814,6 +819,23 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
 (() => {
 "use strict";
 const $=s=>document.querySelector(s);
+// Feil i nettleseren sendes til serveren (maks 5 per økt), så vi ser dem i loggen/Sentry
+let errSent=0;
+function reportError(message,stack){
+  if(errSent>=5) return; errSent++;
+  try{ fetch("/api/client-error",{method:"POST",headers:{"Content-Type":"application/json","X-FL":"1"},credentials:"same-origin",keepalive:true,
+    body:JSON.stringify({message:String(message||"").slice(0,500),stack:String(stack||"").slice(0,2000),url:location.pathname})}).catch(()=>{}); }catch{}
+}
+window.addEventListener("error",e=>{ if(e&&e.message) reportError(e.message,e.error&&e.error.stack); });
+window.addEventListener("unhandledrejection",e=>{ const r=e&&e.reason; if(r&&typeof r==="object"&&"status" in r) return; reportError(r&&r.message||String(r),r&&r.stack); });
+// Driftsmelding øverst (settes fra /admin), og merking av testmiljøet
+function showOps(st){
+  const el=$("#opsbar"); if(!el||!st) return;
+  if(st.message){ el.className="opsbar"+(st.level==="down"?" down":""); el.textContent=st.message; el.hidden=false; }
+  else if(st.env&&st.env!=="produksjon"&&st.env!=="lokal"){ el.className="opsbar test"; el.textContent="Testmiljø – ikke ekte data"; el.hidden=false; }
+  else el.hidden=true;
+}
+fetch("/api/status",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).then(showOps).catch(()=>{});
 const COLORS = 6;
 const DEFAULT_MEMBERS = [
   {id:"p1",name:"Pappa",c:1},{id:"p2",name:"Mamma",c:2},{id:"b1",name:"Barn 1",c:3},{id:"b2",name:"Barn 2",c:4}
@@ -876,7 +898,7 @@ async function api(path,opts={}){
   return j;
 }
 function applyMe(me){
-  S.me=me; imgEnabled=!!me.imageReading; placesEnabled=!!me.placesSearch;
+  S.me=me; if(me.status) showOps(me.status); imgEnabled=!!me.imageReading; placesEnabled=!!me.placesSearch;
   S.pickups=(me.family.settings&&me.family.settings.pickups)||[];
   S.helpers=(me.family.settings&&me.family.settings.helpers)||[];
   if(Array.isArray(me.family.members)&&me.family.members.length) S.members=me.family.members;

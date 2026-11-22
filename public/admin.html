@@ -65,10 +65,36 @@ td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
     <h1><small>Familielogistikk · kun for deg</small>Bruksstatistikk</h1>
     <a class="back" href="/">← Til appen</a>
   </header>
+  <section class="card" id="ops" hidden>
+    <h2>Driftsmelding i appen</h2>
+    <p class="note" style="margin-bottom:10px">Vises øverst for alle brukere. Bruk den når noe er nede eller skal vedlikeholdes, og tøm feltet når alt virker igjen.</p>
+    <form id="opsf" style="display:flex;flex-direction:column;gap:10px">
+      <textarea id="opsmsg" rows="2" maxlength="300" placeholder="F.eks. «Appen er treg akkurat nå. Vi jobber med saken.»" style="font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);resize:vertical"></textarea>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <select id="opslvl" style="font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)"><option value="info">Gul (info)</option><option value="down">Rød (nede)</option></select>
+        <button type="submit" style="font:inherit;font-weight:700;padding:8px 14px;border-radius:10px;border:0;background:var(--ink);color:var(--surface);cursor:pointer">Publiser</button>
+        <button type="button" id="opsclr" style="font:inherit;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer">Fjern meldingen</button>
+        <span class="note" id="opsinfo"></span>
+      </div>
+    </form>
+  </section>
   <div id="out"><div class="msg">Henter tall …</div></div>
   <p class="note">Statistikken er anonym: den teller bare hvilke dager en konto åpnet appen, og antall avtaler, beskjeder og oppgaver. Ingen navn eller innhold vises. Familiene er merket med en tilfeldig kode.</p>
 </main>
 <script>
+async function setupOps(){
+  const box=document.getElementById("ops"), msg=document.getElementById("opsmsg"), lvl=document.getElementById("opslvl"), info=document.getElementById("opsinfo");
+  const show=st=>{ msg.value=st.message||""; lvl.value=st.level==="down"?"down":"info"; info.textContent=(st.message?"Vises nå":"Ingen melding vises")+` · ${st.env||""} · versjon ${st.version||"–"}`; };
+  try{ const r=await fetch("/api/status"); show(await r.json()); box.hidden=false; }catch{ return; }
+  async function save(message){
+    info.textContent="Lagrer …";
+    const r=await fetch("/api/admin/status",{method:"PUT",credentials:"same-origin",headers:{"Content-Type":"application/json","X-FL":"1"},body:JSON.stringify({message,level:lvl.value})});
+    if(!r.ok){ info.textContent="Kunne ikke lagre."; return; }
+    const st=await r.json(); const v=await (await fetch("/api/status")).json(); show({...st,version:v.version});
+  }
+  document.getElementById("opsf").onsubmit=e=>{ e.preventDefault(); save(msg.value.trim()); };
+  document.getElementById("opsclr").onclick=()=>save("");
+}
 (async()=>{
   const out=document.getElementById("out");
   const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -76,6 +102,7 @@ td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
   if(r.status===401){ out.innerHTML='<div class="msg">Du er ikke logget inn. <a href="/">Logg inn i appen</a> og kom tilbake hit.</div>'; return; }
   if(r.status===403){ out.innerHTML='<div class="msg">Denne siden er bare for administratorer. Legg e-postadressen din i <code>ADMIN_EMAILS</code> i Render.</div>'; return; }
   if(!r.ok){ out.innerHTML='<div class="msg">Kunne ikke hente statistikken. Prøv igjen.</div>'; return; }
+  setupOps();
   const d=await r.json(); const t=d.totals, a=d.active, f=d.features;
   const wau=a.wau_families||0, eng=a.engaged_families||0;
   const share=wau?Math.round(100*eng/wau):0;

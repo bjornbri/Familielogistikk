@@ -2,6 +2,15 @@
 // Express + Postgres. Innlogging med e-post og passord, én familie per konto,
 // invitasjonslenker, felles avtaler og (valgfritt) bildelesing via Claude API.
 
+// Feillogging til Sentry slås på med SENTRY_DSN (valgfritt). Må lastes før alt annet.
+const SENTRY_DSN = process.env.SENTRY_DSN || "";
+const VERSION = (process.env.RENDER_GIT_COMMIT || "lokal").slice(0, 7);
+const APP_ENV = process.env.APP_ENV || (process.env.NODE_ENV === "production" ? "produksjon" : "lokal");
+let Sentry = null;
+if (SENTRY_DSN) {
+  try { Sentry = require("@sentry/node"); Sentry.init({ dsn: SENTRY_DSN, environment: APP_ENV, release: VERSION, tracesSampleRate: 0, sendDefaultPii: false }); }
+  catch (e) { console.error("Sentry kunne ikke starte:", e.message); Sentry = null; }
+}
 const path = require("path");
 const crypto = require("crypto");
 const express = require("express");
@@ -36,10 +45,13 @@ function sslFor(url) {
   const host = new URL(url).hostname;
   return host === "localhost" || host === "127.0.0.1" || !host.includes(".") ? false : { rejectUnauthorized: false };
 }
-const pool = new Pool({ connectionString: DATABASE_URL, ssl: sslFor(DATABASE_URL), max: 5 });
+// DB_SCHEMA lar testmiljøet dele database med produksjon uten å se de samme tabellene
+const DB_SCHEMA = /^[a-z_][a-z0-9_]{0,40}$/.test(process.env.DB_SCHEMA || "") ? process.env.DB_SCHEMA : "";
+const pool = new Pool({ connectionString: DATABASE_URL, ssl: sslFor(DATABASE_URL), max: 5, ...(DB_SCHEMA ? { options: `-c search_path=${DB_SCHEMA},public` } : {}) });
 
 // ---------- schema ----------
 async function migrate() {
+  if (DB_SCHEMA) await pool.query(`create schema if not exists ${DB_SCHEMA}`);
   await pool.query(`
     create table if not exists families (
       id uuid primary key default gen_random_uuid(),
@@ -163,6 +175,12 @@ async function migrate() {
       user_id uuid references users(id) on delete set null,
       created_at timestamptz not null default now(),
       primary key (family_id, target_id, date)
+    );
+    create table if not exists app_status (
+      id int primary key default 1,
+      message text not null default '',
+      level text not null default 'info',
+      updated_at timestamptz not null default now()
     );
     create table if not exists confirmations (
       family_id uuid not null references families(id) on delete cascade,
@@ -380,6 +398,7 @@ app.get("/api/me", wrap(auth), wrap(async (req, res) => {
   ).catch(() => {});
   const out = await familyPayload(req.user);
   out.user.isAdmin = ADMIN_EMAILS.includes(String(req.user.email).toLowerCase());
+  out.status = await currentStatus();
   res.json(out);
 }));
 
@@ -1391,12 +1410,42 @@ app.use("/vendor/tesseract", express.static(path.join(__dirname, "node_modules/t
 app.use("/vendor/tesseract-core", express.static(path.join(__dirname, "node_modules/tesseract.js-core"), vendorOpts));
 app.use("/vendor/lang", express.static(path.join(__dirname, "node_modules/@tesseract.js-data/nor/4.0.0"), vendorOpts));
 
-app.get("/healthz", (req, res) => res.send("ok"));
+// Helsesjekk for Render og oppetidsovervåking: sjekker også databasen
+const STARTED = Date.now();
+app.get("/healthz", async (req, res) => {
+  let db = false;
+  try { await Promise.race([pool.query("select 1"), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))]); db = true; } catch {}
+  res.setHeader("Cache-Control", "no-store");
+  res.status(db ? 200 : 503).json({ ok: db, db, version: VERSION, env: APP_ENV, uptimeMin: Math.round((Date.now() - STARTED) / 60000) });
+});
+
+// Driftsmelding som vises i appen for alle (settes fra /admin)
+async function currentStatus() {
+  try { const r = await pool.query(`select message, level, updated_at from app_status where id = 1`); const x = r.rows[0]; return x && x.message ? { message: x.message, level: x.level, updatedAt: x.updated_at, env: APP_ENV } : { message: "", env: APP_ENV }; }
+  catch { return { message: "", env: APP_ENV }; }
+}
+app.get("/api/status", wrap(async (req, res) => { res.setHeader("Cache-Control", "no-store"); res.json({ ...(await currentStatus()), version: VERSION }); }));
+app.put("/api/admin/status", wrap(auth), wrap(async (req, res) => {
+  if (!ADMIN_EMAILS.includes(String(req.user.email).toLowerCase())) return res.status(403).json({ error: "Ingen tilgang." });
+  const message = clean(req.body.message, 300), level = ["info", "warn", "down"].includes(req.body.level) ? req.body.level : "info";
+  await pool.query(`insert into app_status (id, message, level, updated_at) values (1, $1, $2, now()) on conflict (id) do update set message = excluded.message, level = excluded.level, updated_at = now()`, [message, level]);
+  res.json(await currentStatus());
+}));
+
+// Feil fra nettleseren logges på serveren (og i Sentry hvis slått på)
+app.post("/api/client-error", throttle(20, 10 * 60e3), (req, res) => {
+  const b = req.body || {};
+  const msg = clean(b.message, 500), where = clean(b.url, 200), stack = clean(b.stack, 2000);
+  console.error(`[klientfeil] ${msg} @ ${where}\n${stack}`);
+  if (Sentry) Sentry.captureMessage(`Klientfeil: ${msg}`, { level: "error", extra: { url: where, stack, ua: clean(req.get("user-agent"), 200) } });
+  res.json({ ok: true });
+});
 
 app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"], maxAge: PROD ? "1h" : 0 }));
 app.get("/h/:token", (req, res) => { res.setHeader("Referrer-Policy", "no-referrer"); res.setHeader("X-Robots-Tag", "noindex"); res.sendFile(path.join(__dirname, "public", "help.html")); });
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
+if (Sentry) Sentry.setupExpressErrorHandler(app);
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: "Noe gikk galt på serveren. Prøv igjen." });
@@ -1408,5 +1457,5 @@ setInterval(() => {
 }, 3600e3);
 
 migrate()
-  .then(() => app.listen(PORT, () => console.log(`Familielogistikk kjører på port ${PORT}`)))
+  .then(() => app.listen(PORT, () => console.log(`Familielogistikk kjører på port ${PORT} (${APP_ENV}, versjon ${VERSION}${Sentry ? ", Sentry på" : ""})`)))
   .catch((e) => { console.error("Klarte ikke å sette opp databasen:", e); process.exit(1); });

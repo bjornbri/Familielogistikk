@@ -1,31 +1,66 @@
-# Render Blueprint: én webtjeneste og én Postgres-database.
-# I Render: New + → Blueprint → velg dette repoet.
+# Render Blueprint: produksjon (main) og testmiljø (staging).
+# Testmiljøet bruker samme database, men egne tabeller (DB_SCHEMA=staging),
+# så det koster ingenting ekstra og ser aldri ekte familiers data.
 services:
   - type: web
     name: familielogistikk
     runtime: node
     plan: free
     region: frankfurt
+    branch: main
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: produksjon
       - key: DATABASE_URL
         fromDatabase:
           name: familielogistikk-db
           property: connectionString
       - key: ANTHROPIC_API_KEY
-        sync: false   # valgfri: slår på lesing av avtaler fra bilder
+        sync: false
       - key: GOOGLE_MAPS_API_KEY
-        sync: false   # valgfri: slår på stedssøk med Google Maps
+        sync: false
       - key: ADMIN_EMAILS
-        sync: false   # din e-post: gir tilgang til /admin (bruksstatistikk)
+        sync: false
       - key: RESEND_API_KEY
-        sync: false   # e-post for «Glemt passord» (resend.com)
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
       - key: MAIL_FROM
         value: "Familielogistikk <noreply@familielogistikk.no>"
+
+  - type: web
+    name: familielogistikk-test
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: staging
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: test
+      - key: DB_SCHEMA
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: familielogistikk-db
+          property: connectionString
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
 
 databases:
   - name: familielogistikk-db
