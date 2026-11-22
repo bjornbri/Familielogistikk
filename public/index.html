@@ -277,6 +277,7 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:7
 .crow .ct > span{display:block;font-size:.8rem;color:var(--muted)}
 .crow .ct .amt{font-family:var(--f-mono)}
 .pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:5px 11px;font-size:.8rem;font-weight:700;white-space:nowrap;border:1.5px solid transparent;min-height:34px}
+.pill.todo{color:var(--muted);border-color:var(--line)}
 .pill.wait{background:color-mix(in srgb,var(--accent) 16%,var(--surface));border-color:color-mix(in srgb,var(--accent) 60%,var(--line));color:var(--ink)}
 .pill.ok{background:color-mix(in srgb,var(--ok) 14%,var(--surface));border-color:var(--ok);color:var(--ok)}
 .pill.no{background:color-mix(in srgb,var(--danger) 10%,var(--surface));border-color:var(--danger);color:var(--danger)}
@@ -1590,11 +1591,11 @@ const kr=n=>new Intl.NumberFormat("nb-NO").format(n)+" kr";
 function canActFor(mid){ return isParent()||mid===myMid(); }
 function statusCell(c,r,mid){
   if(r&&r.status==="approved") return isParent()?`<button class="pill ok" data-chundo="${esc(c.id)}" aria-label="Godkjent. Trykk for å angre">✓ Godkjent <small style="font-weight:400;opacity:.75">· angre</small></button>`:`<span class="pill ok">✓ Godkjent</span>`;
-  if(r&&r.status==="pending") return `<span class="pill wait">Venter på godkjenning</span>`;
+  if(r&&r.status==="pending") return `<span class="pill wait">Utført · venter</span>`;
   const btns=[];
   if(r&&r.status==="rejected") btns.push(`<span class="pill no">Ikke godkjent</span>`);
   if(c.kind==="pool"&&r&&r.status==="claimed"&&canActFor(r.memberId)) btns.push(`<button class="act light" data-chrel="${esc(c.id)}">Slipp</button>`);
-  if(isParent()) btns.push(`<button class="act" data-chappr="${esc(c.id)}" data-mid="${esc(mid||"")}">Godkjenn ✓</button>`);
+  if(isParent()) btns.push(`<button class="act light" data-chappr="${esc(c.id)}" data-mid="${esc(mid||"")}">Merk utført</button>`);
   else if(canActFor(mid)) btns.push(`<button class="act" data-chdone="${esc(c.id)}">${r&&r.status==="rejected"?"Prøv igjen":"Ferdig ✓"}</button>`);
   return `<div class="cbtns">${btns.join("")}</div>`;
 }
@@ -1604,6 +1605,7 @@ function choreRow(c,mid){
   if(c.kind==="pool"&&r&&r.status==="claimed"&&r.expiresAt){ const h=Math.max(0,Math.round((new Date(r.expiresAt)-Date.now())/36e5)); parts.push(`reservert · ${h} t igjen`); }
   if(r&&r.status==="rejected"&&r.comment) parts.push(esc(r.comment));
   if(c.photo) parts.push("📷 bilde");
+  if(c.kind==="fixed"&&(!r||r.status==="claimed")) parts.push("ikke utført");
   return `<div class="crow"><button class="ct" ${isParent()?`data-chedit="${esc(c.id)}"`:""}><b>${esc(c.title)}</b><span>${parts.join(" · ")||"&nbsp;"}</span></button>${statusCell(c,r,mid)}</div>`;
 }
 function renderChores(){
@@ -1637,13 +1639,15 @@ function renderChores(){
     const mine=ch.chores.filter(c=>c.kind==="pool"&&(runOf(c)||{}).memberId===m.id);
     const p=payFor(m.id); const pay=(ch.payouts||[]).find(x=>x.memberId===m.id);
     const pct=p.fixedTotal?Math.round(100*p.fixedDone/p.fixedTotal):0;
-    h+=`<div class="kid" style="--pc:var(--m${m.c})"><div class="kid-h"><b><i></i>${esc(m.name)}</b><span class="sum">${kr(p.earned)}<small>${p.pending?`+ ${kr(p.pending)} venter`:(p.fixedTotal?`${p.fixedDone} av ${p.fixedTotal} faste`:"tjent")}</small></span>${p.fixedTotal?`<div class="prog"><span style="width:${pct}%"></span></div>`:""}</div>`;
+    h+=`<div class="kid" style="--pc:var(--m${m.c})"><div class="kid-h"><b><i></i>${esc(m.name)}</b><span class="sum">${kr(p.earned)}<small>godkjent${p.pending?` · ${kr(p.pending)} venter`:""}${p.fixedTotal?` · ${p.fixedDone} av ${p.fixedTotal} faste`:""}</small></span>${p.fixedTotal?`<div class="prog"><span style="width:${pct}%"></span></div>`:""}</div>`;
     h+=fixed.map(c=>choreRow(c,m.id)).join("");
     if(mine.length) h+=mine.map(c=>choreRow({...c,title:c.title+" (børs)"},m.id)).join("");
     if(!fixed.length&&!mine.length) h+=`<div class="crow"><span style="color:var(--muted)">Ingen oppgaver denne uken</span></div>`;
     // Vis hvordan summen er regnet ut: oppgavebeløp + fast ukelønn
     const tasks=p.earned-p.base;
-    const al=p.baseMax?(p.earned?`Oppgaver ${kr(tasks)} + fast ukelønn ${kr(p.base)}${p.base<p.baseMax?` av ${kr(p.baseMax)}`:""} = <b>${kr(p.earned)}</b>`:`Fast ukelønn ${kr(p.baseMax)} kommer i tillegg til oppgavene ${p.mode==="share"?"(andel per faste oppgave)":"(når alle faste er godkjent)"}`):"";
+    const al=p.baseMax
+      ? (p.base?`Godkjente oppgaver ${kr(tasks)} + fast ukelønn ${kr(p.base)} = <b>${kr(p.earned)}</b>`:`Godkjente oppgaver ${kr(tasks)}. Fast ukelønn ${kr(p.baseMax)} kommer i tillegg ${p.mode==="share"?"(en andel per godkjent fast oppgave)":"når alle faste er godkjent"}.`)
+      : `Ukelønn = godkjente oppgaver: <b>${kr(p.earned)}</b>${p.pending?` (${kr(p.pending)} venter på godkjenning)`:""}`;
     h+=`<div class="kid-f"><span>${al||"&nbsp;"}</span>${parent?(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span><button class="act light" data-unpay="${esc(m.id)}">Angre</button>`:(p.earned?`<button class="act vipps" data-vipps="${esc(m.id)}" data-amt="${p.earned}">Betal ${kr(p.earned)} med Vipps</button><button class="act light" data-pay="${esc(m.id)}" data-amt="${p.earned}">Betalt på annen måte</button>`:`<span class="pill" style="color:var(--muted)">Ingenting å betale ennå</span>`)):(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span>`:"")}</div></div>`;
   }
   h+=`</section>`;
@@ -1789,8 +1793,6 @@ async function choreExamples(){
   list.slice(0,3).forEach((m,i)=>{ ex.push({title:fixed[i%3],kind:"fixed",assignee:m.id,amount:0,repeat:"weekly",photo:true}); ex.push({title:"Dekke på og av bordet",kind:"fixed",assignee:m.id,amount:0,repeat:"weekly",photo:false}); });
   ex.push({title:"Vaske bilen",kind:"pool",amount:80,repeat:"weekly",photo:true},{title:"Bære inn ved",kind:"pool",amount:30,repeat:"weekly",photo:true},{title:"Støvsuge stua",kind:"pool",amount:40,repeat:"weekly",photo:true});
   for(const c of ex){ await api(`/api/chores/c${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`,{method:"PUT",body:{...c,fromWeek:S.ch.week}}).catch(()=>{}); }
-  const al={}; list.slice(0,3).forEach(m=>al[m.id]={amount:100,mode:"all"});
-  await api("/api/chore-settings",{method:"PUT",body:{maxOpenClaims:2,claimHours:24,allowance:al}}).catch(()=>{});
   toast("Eksempler lagt inn. Endre dem som du vil."); await loadChores();
 }
 // Bildevisning og godkjenning fra bildet
@@ -1811,7 +1813,7 @@ document.addEventListener("click",async e=>{
   if(b.dataset.chdone){ openDone(b.dataset.chdone); return; }
   if(b.dataset.chappr){ const id=b.dataset.chappr, c=S.ch.chores.find(x=>x.id===id), r=c&&runOf(c);
     const who=b.dataset.mid||(c&&c.kind==="fixed"?c.assignee:(r&&r.memberId))||"";
-    const go=async mid=>{ try{ await api(`/api/chores/${encodeURIComponent(id)}/done`,{method:"POST",body:{week:S.ch.week,memberId:mid,approve:true}}); toast(`Godkjent ✓ ${(member(mid)||{}).name||""}`.trim(),"Angre",()=>undoApprove(id)); }catch(e){ if(e.status!==401) toast(e.error); } await loadChores(); };
+    const go=async mid=>{ try{ await api(`/api/chores/${encodeURIComponent(id)}/done`,{method:"POST",body:{week:S.ch.week,memberId:mid}}); toast("Merket som utført. Trykk «Godkjenn» når du har sjekket den."); }catch(e){ if(e.status!==401) toast(e.error); } await loadChores(); };
     if(who) return go(who); return pickKid(`Hvem gjorde «${c?c.title:"oppgaven"}»?`,go); }
   if(b.dataset.chundo){ return undoApprove(b.dataset.chundo); }
   if(b.dataset.vipps){ return payVipps(b.dataset.vipps,+b.dataset.amt||0); }
