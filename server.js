@@ -1192,16 +1192,20 @@ app.post("/api/chores/:id/done", wrap(auth), wrap(async (req, res) => {
     if (buf[0] !== 0xff || buf[1] !== 0xd8) return res.status(400).json({ error: "Bildet må være JPEG." });
     const ph = await pool.query(`insert into photos (family_id, data) values ($1, $2) returning id`, [req.user.family_id, buf]);
     photoId = ph.rows[0].id;
-  } else if (c.chore.photo) {
+  } else if (c.chore.photo && req.user.kind === "child") {
     return res.status(400).json({ error: "Ta et bilde som viser at oppgaven er gjort." });
   }
+  // En forelder som melder oppgaven ferdig, godkjenner den samtidig (bilde er valgfritt)
+  const direct = req.user.kind !== "child" && !!(req.body && req.body.approve);
+  if (!mid) return res.status(400).json({ error: "Velg hvem som gjorde oppgaven." });
   if (c.run && c.run.photo_id) await pool.query(`delete from photos where id = $1`, [c.run.photo_id]);
   await pool.query(
     `insert into chore_runs (family_id, chore_id, week, member_id, status, claimed_at, done_at, photo_id)
-     values ($1, $2, $3, $4, 'pending', now(), now(), $5)
-     on conflict (family_id, chore_id, week) do update set member_id = excluded.member_id, status = 'pending', done_at = now(), photo_id = excluded.photo_id, comment = null, reviewed_at = null, reviewed_by = null`,
-    [req.user.family_id, c.id, c.week, mid, photoId]
+     values ($1, $2, $3, $4, $6, now(), now(), $5)
+     on conflict (family_id, chore_id, week) do update set member_id = excluded.member_id, status = excluded.status, done_at = now(), photo_id = excluded.photo_id, comment = null, reviewed_at = null, reviewed_by = null`,
+    [req.user.family_id, c.id, c.week, mid, photoId, direct ? "approved" : "pending"]
   );
+  if (direct) await pool.query(`update chore_runs set reviewed_by = $4, reviewed_at = now() where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, c.id, c.week, req.user.id]);
   res.json({ ok: true });
 }));
 

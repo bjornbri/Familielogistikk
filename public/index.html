@@ -394,6 +394,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .opsbar.down{background:#B4332E;color:#fff;border-color:#B4332E}
 .opsbar.test{background:var(--ink);color:var(--surface);border-color:var(--ink);font-size:.8rem;padding-block:4px;text-align:center}
 .opsbar small{font-weight:400;opacity:.8;margin-left:6px}
+.act.vipps{background:#FF5B24;color:#fff;border-color:#FF5B24}
 .toast{display:flex;align-items:center;gap:12px}
 .toast button{border:0;background:none;color:var(--accent);font-weight:700;font-size:.95rem;padding:2px 4px}
 @media (prefers-reduced-motion:reduce){.sw-in{transition:none}}
@@ -1593,7 +1594,8 @@ function statusCell(c,r,mid){
   const btns=[];
   if(r&&r.status==="rejected") btns.push(`<span class="pill no">Ikke godkjent</span>`);
   if(c.kind==="pool"&&r&&r.status==="claimed"&&canActFor(r.memberId)) btns.push(`<button class="act light" data-chrel="${esc(c.id)}">Slipp</button>`);
-  if(canActFor(mid)) btns.push(`<button class="act" data-chdone="${esc(c.id)}">${r&&r.status==="rejected"?"Prøv igjen":"Ferdig ✓"}</button>`);
+  if(isParent()) btns.push(`<button class="act" data-chappr="${esc(c.id)}" data-mid="${esc(mid||"")}">Godkjenn ✓</button>`);
+  else if(canActFor(mid)) btns.push(`<button class="act" data-chdone="${esc(c.id)}">${r&&r.status==="rejected"?"Prøv igjen":"Ferdig ✓"}</button>`);
   return `<div class="cbtns">${btns.join("")}</div>`;
 }
 function choreRow(c,mid){
@@ -1640,7 +1642,7 @@ function renderChores(){
     if(mine.length) h+=mine.map(c=>choreRow({...c,title:c.title+" (børs)"},m.id)).join("");
     if(!fixed.length&&!mine.length) h+=`<div class="crow"><span style="color:var(--muted)">Ingen oppgaver denne uken</span></div>`;
     const al=p.baseMax?`Ukelønn ${kr(p.baseMax)} ${p.mode==="share"?"(andel per faste oppgave)":"(når alle faste er godkjent)"}`:"";
-    h+=`<div class="kid-f"><span>${al||"&nbsp;"}</span>${parent?(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span><button class="act light" data-unpay="${esc(m.id)}">Angre</button>`:`<button class="act light" data-pay="${esc(m.id)}" data-amt="${p.earned}" ${p.earned?"":"disabled"}>Marker ${kr(p.earned)} som utbetalt</button>`):(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span>`:"")}</div></div>`;
+    h+=`<div class="kid-f"><span>${al||"&nbsp;"}</span>${parent?(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span><button class="act light" data-unpay="${esc(m.id)}">Angre</button>`:(p.earned?`<button class="act vipps" data-vipps="${esc(m.id)}" data-amt="${p.earned}">Betal ${kr(p.earned)} med Vipps</button><button class="act light" data-pay="${esc(m.id)}" data-amt="${p.earned}">Betalt på annen måte</button>`:`<span class="pill" style="color:var(--muted)">Ingenting å betale ennå</span>`)):(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span>`:"")}</div></div>`;
   }
   h+=`</section>`;
   // 3) Børsen
@@ -1716,7 +1718,8 @@ function openDone(id){
   const needWho=isParent()&&!who; $("#done-who-row").hidden=!needWho;
   if(needWho){ const ks=kids().length?kids():S.members; $("#done-who").innerHTML=ks.map(m=>`<button type="button" data-dw="${esc(m.id)}" aria-pressed="false"><span class="dot" style="background:var(--m${m.c})"></span>${esc(m.name)}</button>`).join(""); }
   $("#done-prev").hidden=true; $("#done-err").hidden=true; $("#done-pick").textContent="Ta bilde";
-  $("#done-pick").hidden=false; $("#done-go").disabled=!!c.photo;
+  $("#done-pick").hidden=false; $("#done-go").disabled=!!c.photo&&!isParent();
+  $("#done-go").textContent=isParent()?"Godkjenn":"Send til godkjenning";
   $("#dlg-done").showModal();
 }
 $("#done-who").addEventListener("click",e=>{ const b=e.target.closest("[data-dw]"); if(!b) return; doneState.memberId=b.dataset.dw; $("#done-who").querySelectorAll("[data-dw]").forEach(x=>x.setAttribute("aria-pressed",String(x===b))); });
@@ -1734,10 +1737,10 @@ function shrinkPhoto(file,max,q){
 }
 $("#doneform").addEventListener("submit",async ev=>{
   ev.preventDefault(); const d=doneState; if(!d) return;
-  if(d.c.photo&&!d.photo){ const er=$("#done-err"); er.textContent="Ta et bilde først."; er.hidden=false; return; }
+  if(d.c.photo&&!d.photo&&!isParent()){ const er=$("#done-err"); er.textContent="Ta et bilde først."; er.hidden=false; return; }
   if(isParent()&&!d.memberId){ const er=$("#done-err"); er.textContent="Velg hvem som gjorde den."; er.hidden=false; return; }
   $("#done-go").disabled=true;
-  try{ await api(`/api/chores/${encodeURIComponent(d.id)}/done`,{method:"POST",body:{week:S.ch.week,photo:d.photo||"",memberId:d.memberId||""}}); $("#dlg-done").close(); toast("Sendt til godkjenning 🎉"); }
+  try{ await api(`/api/chores/${encodeURIComponent(d.id)}/done`,{method:"POST",body:{week:S.ch.week,photo:d.photo||"",memberId:d.memberId||"",approve:isParent()}}); $("#dlg-done").close(); toast(isParent()?"Godkjent ✓":"Sendt til godkjenning 🎉"); }
   catch(e){ const er=$("#done-err"); er.textContent=e.error||"Noe gikk galt."; er.hidden=false; }
   finally{ $("#done-go").disabled=false; }
   await loadChores();
@@ -1797,12 +1800,17 @@ function openPhoto(photoId,choreId){
 }
 document.addEventListener("click",async e=>{
   const t=e.target;
-  const b=t.closest("[data-chdone],[data-chrel],[data-chok],[data-chno],[data-claim],[data-chedit],[data-pay],[data-unpay],[data-photo],[data-new]");
+  const b=t.closest("[data-chappr],[data-vipps],[data-chdone],[data-chrel],[data-chok],[data-chno],[data-claim],[data-chedit],[data-pay],[data-unpay],[data-photo],[data-new]");
   if(!b) return;
   e.preventDefault(); e.stopPropagation();
   if(b.dataset.new){ $("#dlg-new").close(); const k=b.dataset.new; if(k==="event") openEvent(null); else if(k==="sms") openSms(""); else if(k==="note") openNote(null); else if(k==="chore"){ if(!S.ch) await loadChores(); openChore(null); } return; }
   if(b.dataset.photo){ openPhoto(b.dataset.photo,b.dataset.phc); return; }
   if(b.dataset.chdone){ openDone(b.dataset.chdone); return; }
+  if(b.dataset.chappr){ const id=b.dataset.chappr, c=S.ch.chores.find(x=>x.id===id), r=c&&runOf(c);
+    const who=b.dataset.mid||(c&&c.kind==="fixed"?c.assignee:(r&&r.memberId))||"";
+    const go=mid=>chorePost(`/api/chores/${encodeURIComponent(id)}/done`,{memberId:mid,approve:true},`Godkjent ✓ ${(member(mid)||{}).name||""}`.trim());
+    if(who) return go(who); return pickKid(`Hvem gjorde «${c?c.title:"oppgaven"}»?`,go); }
+  if(b.dataset.vipps){ return payVipps(b.dataset.vipps,+b.dataset.amt||0); }
   if(b.dataset.chrel){ return chorePost(`/api/chores/${encodeURIComponent(b.dataset.chrel)}/release`,{},"Oppgaven er tilbake i børsen"); }
   if(b.dataset.chok||b.dataset.chno){ const id=b.dataset.chok||b.dataset.chno; if($("#dlg-photo").open) $("#dlg-photo").close(); return chorePost(`/api/chores/${encodeURIComponent(id)}/review`,{approve:!!b.dataset.chok},b.dataset.chok?"Godkjent ✓":"Markert som ikke godkjent"); }
   if(b.dataset.claim){ return claim(b.dataset.claim); }
@@ -1811,6 +1819,16 @@ document.addEventListener("click",async e=>{
     try{ await api("/api/payouts",{method:"POST",body:{week:S.ch.week,memberId:mid,amount:+b.dataset.amt||0,paid:!!b.dataset.pay}}); toast(b.dataset.pay?"Markert som utbetalt":"Utbetaling angret"); }catch(x){ if(x.status!==401) toast(x.error); }
     return loadChores(); }
 },true);
+// Vipps har ikke noe åpent API for å sende penger mellom privatpersoner. Vi kopierer beløpet,
+// åpner Vipps-appen og markerer ukelønnen som utbetalt (kan angres).
+async function payVipps(mid,amount){
+  const m=member(mid)||{}; const txt=String(amount);
+  try{ await navigator.clipboard.writeText(txt); }catch{}
+  try{ await api("/api/payouts",{method:"POST",body:{week:S.ch.week,memberId:mid,amount,paid:true}}); }catch(x){ if(x.status!==401) toast(x.error); return; }
+  toast(`${kr(amount)} til ${m.name||"barnet"} er kopiert. Velg ${m.name||"barnet"} i Vipps og lim inn beløpet.`);
+  await loadChores();
+  setTimeout(()=>{ location.href="vipps://"; },400);
+}
 function openNew(){ $("#new-chore").hidden=!isParent(); $("#dlg-new").showModal(); }
 async function saveChoreSettings(){
   const al={}; document.querySelectorAll("[data-al]").forEach(i=>{ const v=parseInt(i.value,10)||0; if(v) al[i.dataset.al]={amount:v,mode:(document.querySelector(`[data-alm="${i.dataset.al}"]`)||{}).value||"all"}; });
