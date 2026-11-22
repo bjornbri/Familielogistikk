@@ -1641,7 +1641,9 @@ function renderChores(){
     h+=fixed.map(c=>choreRow(c,m.id)).join("");
     if(mine.length) h+=mine.map(c=>choreRow({...c,title:c.title+" (børs)"},m.id)).join("");
     if(!fixed.length&&!mine.length) h+=`<div class="crow"><span style="color:var(--muted)">Ingen oppgaver denne uken</span></div>`;
-    const al=p.baseMax?`Ukelønn ${kr(p.baseMax)} ${p.mode==="share"?"(andel per faste oppgave)":"(når alle faste er godkjent)"}`:"";
+    // Vis hvordan summen er regnet ut: oppgavebeløp + fast ukelønn
+    const tasks=p.earned-p.base;
+    const al=p.baseMax?(p.earned?`Oppgaver ${kr(tasks)} + fast ukelønn ${kr(p.base)}${p.base<p.baseMax?` av ${kr(p.baseMax)}`:""} = <b>${kr(p.earned)}</b>`:`Fast ukelønn ${kr(p.baseMax)} kommer i tillegg til oppgavene ${p.mode==="share"?"(andel per faste oppgave)":"(når alle faste er godkjent)"}`):"";
     h+=`<div class="kid-f"><span>${al||"&nbsp;"}</span>${parent?(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span><button class="act light" data-unpay="${esc(m.id)}">Angre</button>`:(p.earned?`<button class="act vipps" data-vipps="${esc(m.id)}" data-amt="${p.earned}">Betal ${kr(p.earned)} med Vipps</button><button class="act light" data-pay="${esc(m.id)}" data-amt="${p.earned}">Betalt på annen måte</button>`:`<span class="pill" style="color:var(--muted)">Ingenting å betale ennå</span>`)):(pay?`<span class="pill ok">✓ Utbetalt ${kr(pay.amount)}</span>`:"")}</div></div>`;
   }
   h+=`</section>`;
@@ -1659,8 +1661,9 @@ function renderChores(){
     h+=`<div class="cbtns" style="justify-content:flex-start"><button class="act" data-act="chore-new">+ Ny oppgave</button></div>`;
     const st=ch.settings;
     h+=`<details class="ch-set"><summary>Ukelønn og regler</summary>
-      <div class="grid" id="set-grid"><b>Barn</b><b>Ukelønn (kr)</b><b class="mode">Regel</b>
+      <div class="grid" id="set-grid"><b>Barn</b><b>Fast ukelønn (kr)</b><b class="mode">Regel</b>
       ${(ks.length?ks:S.members).map(m=>{ const a=(st.allowance||{})[m.id]||{}; return `<span>${esc(m.name)}</span><input type="number" min="0" step="10" inputmode="numeric" data-al="${esc(m.id)}" value="${a.amount||""}" placeholder="0" aria-label="Ukelønn ${esc(m.name)}"><select class="mode" data-alm="${esc(m.id)}" aria-label="Regel ${esc(m.name)}"><option value="all" ${a.mode!=="share"?"selected":""}>Alle faste må gjøres</option><option value="share" ${a.mode==="share"?"selected":""}>Andel per oppgave</option></select>`; }).join("")}
+      <span class="mode" style="grid-column:1/-1;font-size:.82rem;color:var(--muted)">Fast ukelønn kommer i tillegg til beløpene på hver oppgave. Skal barnet bare tjene det oppgavene er verdt, sett den til 0.</span>
       <span>Maks reservert samtidig</span><input type="number" min="1" max="10" id="set-max" value="${st.maxOpenClaims}"><span class="mode"></span>
       <span>Frist for reservert (timer)</span><input type="number" min="1" max="168" id="set-hours" value="${st.claimHours}"><span class="mode"></span>
       </div><div class="cbtns" style="margin-top:10px"><button class="act" data-act="set-save">Lagre</button></div></details>`;
