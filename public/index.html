@@ -1589,7 +1589,7 @@ function payFor(mid){
 const kr=n=>new Intl.NumberFormat("nb-NO").format(n)+" kr";
 function canActFor(mid){ return isParent()||mid===myMid(); }
 function statusCell(c,r,mid){
-  if(r&&r.status==="approved") return `<span class="pill ok">✓ Godkjent</span>`;
+  if(r&&r.status==="approved") return isParent()?`<button class="pill ok" data-chundo="${esc(c.id)}" aria-label="Godkjent. Trykk for å angre">✓ Godkjent <small style="font-weight:400;opacity:.75">· angre</small></button>`:`<span class="pill ok">✓ Godkjent</span>`;
   if(r&&r.status==="pending") return `<span class="pill wait">Venter på godkjenning</span>`;
   const btns=[];
   if(r&&r.status==="rejected") btns.push(`<span class="pill no">Ikke godkjent</span>`);
@@ -1800,7 +1800,7 @@ function openPhoto(photoId,choreId){
 }
 document.addEventListener("click",async e=>{
   const t=e.target;
-  const b=t.closest("[data-chappr],[data-vipps],[data-chdone],[data-chrel],[data-chok],[data-chno],[data-claim],[data-chedit],[data-pay],[data-unpay],[data-photo],[data-new]");
+  const b=t.closest("[data-chundo],[data-chappr],[data-vipps],[data-chdone],[data-chrel],[data-chok],[data-chno],[data-claim],[data-chedit],[data-pay],[data-unpay],[data-photo],[data-new]");
   if(!b) return;
   e.preventDefault(); e.stopPropagation();
   if(b.dataset.new){ $("#dlg-new").close(); const k=b.dataset.new; if(k==="event") openEvent(null); else if(k==="sms") openSms(""); else if(k==="note") openNote(null); else if(k==="chore"){ if(!S.ch) await loadChores(); openChore(null); } return; }
@@ -1808,11 +1808,12 @@ document.addEventListener("click",async e=>{
   if(b.dataset.chdone){ openDone(b.dataset.chdone); return; }
   if(b.dataset.chappr){ const id=b.dataset.chappr, c=S.ch.chores.find(x=>x.id===id), r=c&&runOf(c);
     const who=b.dataset.mid||(c&&c.kind==="fixed"?c.assignee:(r&&r.memberId))||"";
-    const go=mid=>chorePost(`/api/chores/${encodeURIComponent(id)}/done`,{memberId:mid,approve:true},`Godkjent ✓ ${(member(mid)||{}).name||""}`.trim());
+    const go=async mid=>{ try{ await api(`/api/chores/${encodeURIComponent(id)}/done`,{method:"POST",body:{week:S.ch.week,memberId:mid,approve:true}}); toast(`Godkjent ✓ ${(member(mid)||{}).name||""}`.trim(),"Angre",()=>undoApprove(id)); }catch(e){ if(e.status!==401) toast(e.error); } await loadChores(); };
     if(who) return go(who); return pickKid(`Hvem gjorde «${c?c.title:"oppgaven"}»?`,go); }
+  if(b.dataset.chundo){ return undoApprove(b.dataset.chundo); }
   if(b.dataset.vipps){ return payVipps(b.dataset.vipps,+b.dataset.amt||0); }
   if(b.dataset.chrel){ return chorePost(`/api/chores/${encodeURIComponent(b.dataset.chrel)}/release`,{},"Oppgaven er tilbake i børsen"); }
-  if(b.dataset.chok||b.dataset.chno){ const id=b.dataset.chok||b.dataset.chno; if($("#dlg-photo").open) $("#dlg-photo").close(); return chorePost(`/api/chores/${encodeURIComponent(id)}/review`,{approve:!!b.dataset.chok},b.dataset.chok?"Godkjent ✓":"Markert som ikke godkjent"); }
+  if(b.dataset.chok||b.dataset.chno){ const id=b.dataset.chok||b.dataset.chno; if($("#dlg-photo").open) $("#dlg-photo").close(); const ok=!!b.dataset.chok; await chorePost(`/api/chores/${encodeURIComponent(id)}/review`,{approve:ok},ok?"":"Markert som ikke godkjent"); if(ok) toast("Godkjent ✓","Angre",()=>undoApprove(id)); return; }
   if(b.dataset.claim){ return claim(b.dataset.claim); }
   if(b.dataset.chedit){ const c=S.ch.chores.find(x=>x.id===b.dataset.chedit); if(c) openChore(c); return; }
   if(b.dataset.pay||b.dataset.unpay){ const mid=b.dataset.pay||b.dataset.unpay;
@@ -1828,6 +1829,11 @@ async function payVipps(mid,amount){
   toast(`${kr(amount)} til ${m.name||"barnet"} er kopiert. Velg ${m.name||"barnet"} i Vipps og lim inn beløpet.`);
   await loadChores();
   setTimeout(()=>{ location.href="vipps://"; },400);
+}
+async function undoApprove(id){
+  try{ await api(`/api/chores/${encodeURIComponent(id)}/unapprove`,{method:"POST",body:{week:S.ch.week}}); toast("Godkjenningen er angret"); }
+  catch(e){ if(e.status!==401) toast(e.error); }
+  await loadChores();
 }
 function openNew(){ $("#new-chore").hidden=!isParent(); $("#dlg-new").showModal(); }
 async function saveChoreSettings(){

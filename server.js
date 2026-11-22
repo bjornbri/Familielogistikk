@@ -117,6 +117,7 @@ async function migrate() {
       comment text,
       primary key (family_id, chore_id, week)
     );
+    alter table chore_runs add column if not exists direct boolean not null default false;
     create table if not exists photos (
       id uuid primary key default gen_random_uuid(),
       family_id uuid not null references families(id) on delete cascade,
@@ -1202,10 +1203,10 @@ app.post("/api/chores/:id/done", wrap(auth), wrap(async (req, res) => {
   await pool.query(
     `insert into chore_runs (family_id, chore_id, week, member_id, status, claimed_at, done_at, photo_id)
      values ($1, $2, $3, $4, $6, now(), now(), $5)
-     on conflict (family_id, chore_id, week) do update set member_id = excluded.member_id, status = excluded.status, done_at = now(), photo_id = excluded.photo_id, comment = null, reviewed_at = null, reviewed_by = null`,
+     on conflict (family_id, chore_id, week) do update set member_id = excluded.member_id, status = excluded.status, done_at = now(), photo_id = excluded.photo_id, comment = null, reviewed_at = null, reviewed_by = null, direct = false`,
     [req.user.family_id, c.id, c.week, mid, photoId, direct ? "approved" : "pending"]
   );
-  if (direct) await pool.query(`update chore_runs set reviewed_by = $4, reviewed_at = now() where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, c.id, c.week, req.user.id]);
+  if (direct) await pool.query(`update chore_runs set reviewed_by = $4, reviewed_at = now(), direct = true where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, c.id, c.week, req.user.id]);
   res.json({ ok: true });
 }));
 
@@ -1217,6 +1218,23 @@ app.post("/api/chores/:id/review", wrap(auth), parentOnly, wrap(async (req, res)
     `update chore_runs set status = $4, reviewed_by = $5, reviewed_at = now(), comment = $6 where family_id = $1 and chore_id = $2 and week = $3`,
     [req.user.family_id, c.id, c.week, approve ? "approved" : "rejected", req.user.id, clean(req.body.comment, 200) || null]
   );
+  res.json({ ok: true });
+}));
+
+// Angre en godkjenning: oppgaven går tilbake dit den var (til godkjenning, eller åpen igjen
+// hvis en forelder godkjente den direkte). Ikke mulig når ukelønnen er markert som utbetalt.
+app.post("/api/chores/:id/unapprove", wrap(auth), parentOnly, wrap(async (req, res) => {
+  const c = await loadChore(req, res); if (!c) return;
+  if (!c.run || c.run.status !== "approved") return res.status(400).json({ error: "Oppgaven er ikke godkjent." });
+  const paid = await pool.query(`select 1 from payouts where family_id = $1 and member_id = $2 and week = $3`, [req.user.family_id, c.run.member_id, c.week]);
+  if (paid.rows[0]) return res.status(409).json({ error: "Ukelønnen er allerede markert som utbetalt. Angre utbetalingen først." });
+  if (c.run.direct) {
+    if (c.run.photo_id) await pool.query(`delete from photos where id = $1`, [c.run.photo_id]);
+    if (c.chore.kind === "pool") await pool.query(`update chore_runs set status = 'claimed', done_at = null, reviewed_at = null, reviewed_by = null, direct = false, photo_id = null, claimed_at = now() where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, c.id, c.week]);
+    else await pool.query(`delete from chore_runs where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, c.id, c.week]);
+  } else {
+    await pool.query(`update chore_runs set status = 'pending', reviewed_at = null, reviewed_by = null where family_id = $1 and chore_id = $2 and week = $3`, [req.user.family_id, c.id, c.week]);
+  }
   res.json({ ok: true });
 }));
 
