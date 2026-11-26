@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Familielogistikk</title>
+<title>Tumli</title>
 <meta name="theme-color" content="#16302B">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Familielogistikk">
+<meta name="apple-mobile-web-app-title" content="Tumli">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -50,7 +50,7 @@ button{cursor:pointer}
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:12px}
 .brand{font-family:var(--f-display);font-weight:700;font-size:1.25rem;letter-spacing:-.01em;margin-right:auto;display:flex;align-items:center;gap:10px}
-.brand .mark{width:26px;height:26px;border-radius:7px;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:.8rem;font-family:var(--f-mono)}
+.brand .mark{width:26px;height:26px;border-radius:7px;object-fit:cover;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:.8rem;font-family:var(--f-mono)}
 .tabs{display:flex;background:var(--soft);border-radius:10px;padding:3px}
 .tabs button{border:0;background:none;padding:6px 14px;border-radius:8px;font-weight:700;color:var(--muted)}
 .tabs button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
@@ -525,7 +525,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
 
 <section id="auth" hidden>
   <form class="auth-card" id="auth-form" novalidate>
-    <div class="brand"><span class="mark" aria-hidden="true">FL</span>Familielogistikk</div>
+    <div class="brand"><img class="mark" src="/icon-192.png" alt="">Tumli</div>
     <p class="lead" id="auth-lead">Hele familiens avtaler på ett sted.</p>
     <div class="invite-note" id="invite-note" hidden></div>
     <div class="auth-box">
@@ -550,7 +550,7 @@ body.authing > header,body.authing > .wrap,body.authing .bottombar{display:none}
 
 <header>
   <div class="wrap bar">
-    <div class="brand"><span class="mark" aria-hidden="true">FL</span>Familielogistikk</div>
+    <div class="brand"><img class="mark" src="/icon-192.png" alt="">Tumli</div>
     <div class="tabs" role="group" aria-label="Visning">
       <button id="tab-day" data-view="day" aria-pressed="true">I dag</button>
       <button id="tab-week" data-view="week" aria-pressed="false">Uke</button>
@@ -2119,7 +2119,7 @@ $("#inv-copy").addEventListener("click",async()=>{
   try{ await navigator.clipboard.writeText(invUrl); toast("Lenken er kopiert"); }
   catch{ const i=$("#inv-url"); i.focus(); i.select(); toast("Marker og kopier lenken"); }
 });
-$("#inv-share").addEventListener("click",()=>{ navigator.share({title:"Familielogistikk",text:"Bli med i familiekalenderen vår:",url:invUrl}).catch(()=>{}); });
+$("#inv-share").addEventListener("click",()=>{ navigator.share({title:"Tumli",text:"Bli med i familiekalenderen vår:",url:invUrl}).catch(()=>{}); });
 $("#logout").addEventListener("click",async()=>{ dFam.close(); try{ await api("/api/logout",{method:"POST",body:{}}); }catch{} S.events=[]; S.loaded=false; showAuth(); });
 $("#open-fam").addEventListener("click",()=>openFam());
 $("#acct-list").addEventListener("click",async e=>{

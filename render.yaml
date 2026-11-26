@@ -35,7 +35,7 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: MAIL_FROM
-        value: "Familielogistikk <noreply@familielogistikk.no>"
+        value: "Tumli <noreply@tumli.app>"
 
   - type: web
     name: familielogistikk-test

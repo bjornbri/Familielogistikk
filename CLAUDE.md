@@ -1,4 +1,8 @@
-# Familielogistikk – for utviklere og AI-assistenter
+# Tumli – for utviklere og AI-assistenter
+
+Appen het tidligere Familielogistikk. Repoet, Render-tjenestene og databasen
+heter fortsatt `familielogistikk` – ikke gi dem nytt navn, da lager Render nye tjenester.
+Adresse: https://tumli.app
 
 Les denne først. Den beskriver hvordan appen er bygget, hvordan den kjøres og
 hvilke regler som gjelder. Eier: Bjørn (produkt, kontoer, drift). All tekst i

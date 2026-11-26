@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="referrer" content="no-referrer">
-<title>Kan du hjelpe? · Familielogistikk</title>
+<title>Kan du hjelpe? · Tumli</title>
 <link rel="icon" href="/icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
@@ -57,7 +57,7 @@ button:disabled{opacity:.6}
 </head>
 <body>
 <main id="m">
-  <div class="brand"><span aria-hidden="true">FL</span>Familielogistikk</div>
+  <div class="brand"><img src="/icon-192.png" alt="" style="width:28px;height:28px;border-radius:8px">Tumli</div>
   <p class="small">Henter …</p>
 </main>
 <script>
@@ -65,7 +65,7 @@ button:disabled{opacity:.6}
   const m=document.getElementById("m");
   const tok=location.pathname.split("/").pop();
   const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const head=`<div class="brand"><span aria-hidden="true">FL</span>Familielogistikk</div>`;
+  const head=`<div class="brand"><img src="/icon-192.png" alt="" style="width:28px;height:28px;border-radius:8px">Tumli</div>`;
   function show(v){
     if(v.status==="open"){
       m.innerHTML=`${head}<h1>Hei ${esc(v.helperName)}!</h1>

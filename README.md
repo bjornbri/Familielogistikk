@@ -1,4 +1,4 @@
-# Familielogistikk – testversjon
+# Tumli (tidligere Familielogistikk) – testversjon
 
 Felles familiekalender. Åpner på «I dag» med det som skjer nå og resten av dagen.
 Har uke- og månedsvisning, en fullskjermtavle for nettbrett/vegg, og avtaler kan lages fra innlimte SMS-er og skjermbilder.

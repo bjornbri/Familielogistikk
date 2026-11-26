@@ -1,4 +1,4 @@
-// Familielogistikk – testversjon
+// Tumli (tidligere Familielogistikk) – testversjon
 // Express + Postgres. Innlogging med e-post og passord, én familie per konto,
 // invitasjonslenker, felles avtaler og (valgfritt) bildelesing via Claude API.
 
@@ -28,7 +28,7 @@ const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || "";
 const SESSION_DAYS = 60;
 const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const MAIL_FROM = process.env.MAIL_FROM || "Familielogistikk <noreply@familielogistikk.no>";
+const MAIL_FROM = process.env.MAIL_FROM || "Tumli <noreply@tumli.app>";
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
 const INVITE_DAYS = 7;
 
@@ -478,9 +478,9 @@ app.post("/api/password/forgot", throttle(5, 15 * 60e3), wrap(async (req, res) =
   const base = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get("host")}`;
   const link = `${base}/?reset=${t}`;
   const first = String(rows[0].name).split(/\s+/)[0];
-  const text = `Hei ${first}!\n\nNoen (forhåpentligvis du) ba om å lage nytt passord til Familielogistikk.\n\nÅpne denne lenken innen 1 time:\n${link}\n\nHar du ikke bedt om dette, kan du se bort fra e-posten. Passordet ditt er ikke endret.\n\nHilsen Familielogistikk`;
-  const html = `<p>Hei ${first.replace(/[<>&]/g, "")}!</p><p>Noen (forhåpentligvis du) ba om å lage nytt passord til Familielogistikk.</p><p><a href="${link}" style="display:inline-block;background:#16302B;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Lag nytt passord</a></p><p>Lenken virker i 1 time. Har du ikke bedt om dette, kan du se bort fra e-posten. Passordet ditt er ikke endret.</p><p>Hilsen Familielogistikk</p>`;
-  await sendMail(email, "Lag nytt passord til Familielogistikk", text, html);
+  const text = `Hei ${first}!\n\nNoen (forhåpentligvis du) ba om å lage nytt passord til Tumli.\n\nÅpne denne lenken innen 1 time:\n${link}\n\nHar du ikke bedt om dette, kan du se bort fra e-posten. Passordet ditt er ikke endret.\n\nHilsen Familielogistikk`;
+  const html = `<p>Hei ${first.replace(/[<>&]/g, "")}!</p><p>Noen (forhåpentligvis du) ba om å lage nytt passord til Tumli.</p><p><a href="${link}" style="display:inline-block;background:#16302B;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Lag nytt passord</a></p><p>Lenken virker i 1 time. Har du ikke bedt om dette, kan du se bort fra e-posten. Passordet ditt er ikke endret.</p><p>Hilsen Familielogistikk</p>`;
+  await sendMail(email, "Lag nytt passord til Tumli", text, html);
   res.json(generic);
 }));
 app.get("/api/password/reset/:token", wrap(async (req, res) => {
@@ -1323,7 +1323,7 @@ async function fetchIcs(urlStr) {
   }
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
   try {
-    const r = await fetch(urlStr, { signal: ctl.signal, redirect: "follow", headers: { "User-Agent": "Familielogistikk/0.1 (kalenderabonnement)", Accept: "text/calendar,*/*" } });
+    const r = await fetch(urlStr, { signal: ctl.signal, redirect: "follow", headers: { "User-Agent": "Tumli/0.1 (kalenderabonnement; +https://tumli.app)", Accept: "text/calendar,*/*" } });
     if (!r.ok) throw new Error(r.status === 404 ? "Kalenderen finnes ikke (404). Sjekk lenken." : r.status === 401 || r.status === 403 ? "Kalenderen er ikke delt (ingen tilgang). Bruk den hemmelige/offentlige iCal-lenken." : `Kalenderen svarte med feil ${r.status}.`);
     const text = await r.text();
     if (text.length > 8e6) throw new Error("Kalenderen er for stor.");
@@ -1552,5 +1552,5 @@ setInterval(() => {
 }, 3600e3);
 
 migrate()
-  .then(() => app.listen(PORT, () => console.log(`Familielogistikk kjører på port ${PORT} (${APP_ENV}, versjon ${VERSION}${Sentry ? ", Sentry på" : ""})`)))
+  .then(() => app.listen(PORT, () => console.log(`Tumli kjører på port ${PORT} (${APP_ENV}, versjon ${VERSION}${Sentry ? ", Sentry på" : ""})`)))
   .catch((e) => { console.error("Klarte ikke å sette opp databasen:", e); process.exit(1); });
